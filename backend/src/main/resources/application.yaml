@@ -1,3 +1,13 @@
 spring:
   application:
     name: exocad-marketplace-api
+
+storage:
+  s3:
+    endpoint: http://localhost:9000
+    public-endpoint: http://localhost:9000
+    region: us-east-1
+    bucket: exocad-cases
+    access-key: minioadmin
+    secret-key: minioadmin
+    presigned-url-expiration-minutes: 15

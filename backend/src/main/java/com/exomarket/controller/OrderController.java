@@ -2,7 +2,10 @@ package com.exomarket.controller;
 
 import com.exomarket.OrderStatus;
 import com.exomarket.dto.CreateOrderRequest;
+import com.exomarket.dto.CreateUploadUrlRequest;
 import com.exomarket.dto.OrderResponse;
+import com.exomarket.dto.UploadUrlResponse;
+import com.exomarket.service.FileStorageService;
 import com.exomarket.service.OrderService;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -21,9 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class OrderController {
 
     private final OrderService orderService;
+    private final FileStorageService fileStorageService;
 
-    public OrderController(OrderService orderService) {
+    public OrderController(OrderService orderService, FileStorageService fileStorageService) {
         this.orderService = orderService;
+        this.fileStorageService = fileStorageService;
     }
 
     @PostMapping
@@ -42,5 +47,13 @@ public class OrderController {
     @GetMapping("/{id}")
     public OrderResponse getById(@PathVariable Long id) {
         return orderService.getById(id);
+    }
+
+    @PostMapping("/{orderId}/upload-url")
+    public UploadUrlResponse createUploadUrl(
+            @PathVariable Long orderId,
+            @Valid @RequestBody CreateUploadUrlRequest request
+    ) {
+        return fileStorageService.createUploadUrl(orderId, request);
     }
 }

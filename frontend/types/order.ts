@@ -1,4 +1,5 @@
 export type OrderStatus = 'OPEN' | 'IN_PROGRESS' | 'REVIEW' | 'COMPLETED'
+export type AttachmentStage = 'CLINICAL_INPUT' | 'CAD_DELIVERY'
 
 export type ToothItem = {
   toothNumber: number
@@ -30,4 +31,28 @@ export type OrderResponse = {
   createdAt?: string
   updatedAt?: string
   items: OrderItemResponse[]
+}
+
+export type CreateUploadUrlRequest = {
+  fileName: string
+  mimeType: string
+  size: number
+  attachmentStage: AttachmentStage
+}
+
+export type UploadUrlResponse = {
+  attachmentId: number
+  uploadUrl: string
+  storagePath: string
+  expiresAt: string
+}
+
+export type OrderAttachment = {
+  id: number | string
+  fileName: string
+  size: number
+  stage: AttachmentStage
+  mimeType?: string
+  downloadUrl?: string
+  viewerUrl?: string
 }
