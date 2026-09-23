@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Activity,
   ArrowRight,
@@ -39,8 +39,21 @@ import {
   X,
   ZoomIn,
 } from 'lucide-react'
+import { createOrder, getOrders } from '@/services/orderService'
+import type { CreateOrderRequest, OrderResponse } from '@/types/order'
 
-const orders = [
+type DashboardOrder = {
+  id: string
+  patient: string
+  work: string
+  status: string
+  date: string
+  price: string
+}
+
+const FALLBACK_USER_ID = 1
+
+const fallbackOrders: DashboardOrder[] = [
   { id: 'OS-24091', patient: 'M. Andrade', work: 'Coroa monolítica · 16', status: 'Em Revisão', date: 'Hoje, 09:42', price: 'R$ 460,00' },
   { id: 'OS-24088', patient: 'L. Ferreira', work: 'Faceta · 11, 21', status: 'Em Desenho', date: 'Ontem, 16:20', price: 'R$ 620,00' },
   { id: 'OS-24084', patient: 'C. Lima', work: 'Implante · 36', status: 'Aguardando Cadista', date: '12 Jun, 11:08', price: 'R$ 780,00' },
@@ -60,6 +73,48 @@ const navItems = [
   { label: 'Novo caso', icon: Plus },
 ]
 
+function formatCurrency(value: number) {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function formatDate(value?: string) {
+  if (!value) {
+    return 'Agora'
+  }
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function mapStatus(status: OrderResponse['status']) {
+  const labels: Record<OrderResponse['status'], string> = {
+    OPEN: 'Aguardando Cadista',
+    IN_PROGRESS: 'Em Desenho',
+    REVIEW: 'Em Revisão',
+    COMPLETED: 'Concluído',
+  }
+
+  return labels[status]
+}
+
+function mapOrder(order: OrderResponse): DashboardOrder {
+  const teeth = order.items.map((item) => item.toothNumber).join(', ')
+  const serviceType = order.items[0]?.serviceType ?? 'Caso odontológico'
+
+  return {
+    id: `OS-${String(order.id).padStart(5, '0')}`,
+    patient: order.title,
+    work: `${serviceType} · ${teeth || 'Sem dentes'}`,
+    status: mapStatus(order.status),
+    date: formatDate(order.createdAt),
+    price: formatCurrency(order.totalAmount),
+  }
+}
+
 function StatusBadge({ status }: { status: string }) {
   const tone = status === 'Concluído' ? 'success' : status === 'Em Revisão' ? 'review' : status === 'Em Desenho' ? 'drawing' : 'waiting'
   return <span className={`status-badge ${tone}`}><span className="status-dot" />{status}</span>
@@ -73,25 +128,56 @@ function Header({ role, setRole, dark, setDark }: { role: 'Dentista' | 'Cadista'
   return <header className="topbar"><div className="topbar-left"><button className="mobile-menu" aria-label="Abrir menu"><PanelLeft /></button><Brand /></div><div className="topbar-actions"><div className="role-switcher" aria-label="Seletor de perfil"><button className={role === 'Dentista' ? 'active' : ''} onClick={() => setRole('Dentista')}><UserRound />Dentista</button><button className={role === 'Cadista' ? 'active' : ''} onClick={() => setRole('Cadista')}><UsersRound />Cadista</button></div><button className="icon-button" aria-label="Alternar tema" onClick={() => setDark(!dark)}>{dark ? <Sun /> : <Moon />}</button><button className="notification-button" aria-label="Notificações"><Bell /><span /></button><div className="profile-avatar">DM</div><ChevronDown className="chevron" /></div></header>
 }
 
-function Sidebar({ active, setActive, role }: { active: string; setActive: (label: string) => void; role: string }) {
-  return <aside className="sidebar"><div className="sidebar-profile"><div className="large-avatar">DM</div><div><strong>Dr. Daniel Martins</strong><span>{role} · Clínica Sorriso</span></div><MoreHorizontal className="muted-icon" /></div><nav className="main-nav">{navItems.map(({ label, icon: Icon }) => <button key={label} className={active === label ? 'nav-item active' : 'nav-item'} onClick={() => setActive(label)}><Icon />{label}{label === 'Minhas OS' && <span className="nav-count">4</span>}</button>)}</nav><div className="sidebar-label">GESTÃO</div><nav className="main-nav"><button className="nav-item"><WalletCards />Financeiro</button><button className="nav-item"><MessageCircle />Mensagens<span className="nav-count blue">2</span></button><button className="nav-item"><Settings2 />Configurações</button></nav><div className="sidebar-bottom"><div className="secure-card"><ShieldCheck /><div><strong>Ambiente seguro</strong><span>Seus dados são protegidos</span></div></div><div className="sidebar-help"><span>Precisa de ajuda?</span><button>Falar com suporte <ArrowRight /></button></div></div></aside>
+function Sidebar({ active, setActive, role, orderCount }: { active: string; setActive: (label: string) => void; role: string; orderCount: number }) {
+  return <aside className="sidebar"><div className="sidebar-profile"><div className="large-avatar">DM</div><div><strong>Dr. Daniel Martins</strong><span>{role} · Clínica Sorriso</span></div><MoreHorizontal className="muted-icon" /></div><nav className="main-nav">{navItems.map(({ label, icon: Icon }) => <button key={label} className={active === label ? 'nav-item active' : 'nav-item'} onClick={() => setActive(label)}><Icon />{label}{label === 'Minhas OS' && <span className="nav-count">{orderCount}</span>}</button>)}</nav><div className="sidebar-label">GESTÃO</div><nav className="main-nav"><button className="nav-item"><WalletCards />Financeiro</button><button className="nav-item"><MessageCircle />Mensagens<span className="nav-count blue">2</span></button><button className="nav-item"><Settings2 />Configurações</button></nav><div className="sidebar-bottom"><div className="secure-card"><ShieldCheck /><div><strong>Ambiente seguro</strong><span>Seus dados são protegidos</span></div></div><div className="sidebar-help"><span>Precisa de ajuda?</span><button>Falar com suporte <ArrowRight /></button></div></div></aside>
 }
 
 function StatCard({ icon: Icon, label, value, trend, tone }: { icon: typeof Activity; label: string; value: string; trend: string; tone: string }) {
   return <div className="stat-card"><div className={`stat-icon ${tone}`}><Icon /></div><div><span className="eyebrow">{label}</span><div className="stat-value">{value}</div><span className="stat-trend">{trend}</span></div></div>
 }
 
-function Dashboard({ onNewCase, onReview }: { onNewCase: () => void; onReview: () => void }) {
-  return <div className="page-content"><div className="page-heading"><div><div className="eyebrow">TERÇA-FEIRA, 18 DE JUNHO DE 2024</div><h1>Bom dia, Dr. Daniel</h1><p>Acompanhe seus casos e mantenha seu fluxo digital em dia.</p></div><button className="primary-button" onClick={onNewCase}><Plus />Novo caso</button></div><div className="stats-grid"><StatCard icon={Activity} label="Casos ativos" value="12" trend="↑ 8% este mês" tone="blue"/><StatCard icon={Clock3} label="Aguardando ação" value="04" trend="2 precisam de revisão" tone="amber"/><StatCard icon={CircleDollarSign} label="Em garantia" value="R$ 4.280" trend="↑ 12% este mês" tone="green"/><StatCard icon={PackageCheck} label="Concluídos" value="28" trend="↑ 6 este mês" tone="violet"/></div><div className="content-grid"><section className="panel orders-panel"><div className="panel-header"><div><h2>Ordens de serviço</h2><p>Seus casos mais recentes</p></div><button className="text-button">Ver todas <ArrowRight /></button></div><div className="filter-row"><div className="search-box"><Search /><input placeholder="Buscar por paciente ou OS..." /></div><button className="filter-button">Todos os status <ChevronDown /></button></div><div className="orders-list">{orders.map((order, index) => <button key={order.id} className="order-row" onClick={index === 0 ? onReview : undefined}><div className="order-leading"><div className={`order-icon ${index === 0 ? 'selected' : ''}`}><FileCheck2 /></div><div><strong>{order.id} <span>·</span> {order.patient}</strong><span>{order.work}</span></div></div><div className="order-meta"><StatusBadge status={order.status}/><span>{order.date}</span><strong>{order.price}</strong><ArrowRight /></div></button>)}</div></section><section className="panel quick-panel"><div className="panel-header"><div><h2>Atalhos rápidos</h2><p>O que você precisa fazer hoje?</p></div></div><div className="quick-actions"><button onClick={onNewCase}><div className="quick-icon blue"><Plus /></div><div><strong>Criar novo caso</strong><span>Envie um novo trabalho para a rede</span></div><ArrowRight /></button><button onClick={onReview}><div className="quick-icon purple"><GitCompare /></div><div><strong>Revisar caso</strong><span>OS-24091 aguarda sua aprovação</span></div><ArrowRight /></button><button><div className="quick-icon green"><CircleDollarSign /></div><div><strong>Consultar financeiro</strong><span>Saldo disponível: R$ 8.420</span></div><ArrowRight /></button></div><div className="tip-card"><Sparkles /><div><strong>Dica do dia</strong><p>Casos com fotos clínicas têm 24% menos ciclos de revisão.</p></div></div></section></div><section className="activity-section"><div className="panel-header"><div><h2>Atividade recente</h2><p>Atualizações do seu fluxo de trabalho</p></div><button className="text-button">Ver histórico <ArrowRight /></button></div><div className="activity-list"><div className="activity-item"><div className="activity-bullet green"><Check /></div><div><strong>OS-24077 foi concluída</strong><span>O pagamento de R$ 920,00 foi liberado · há 2h</span></div><div className="activity-avatar">RS</div></div><div className="activity-item"><div className="activity-bullet blue"><MessageCircle /></div><div><strong>Nova mensagem em OS-24091</strong><span>Rafael Souza enviou uma atualização · há 4h</span></div><div className="activity-avatar warm">RS</div></div></div></section></div>
+function Dashboard({ orders, usingFallback, onNewCase, onReview }: { orders: DashboardOrder[]; usingFallback: boolean; onNewCase: () => void; onReview: () => void }) {
+  return <div className="page-content"><div className="page-heading"><div><div className="eyebrow">TERÇA-FEIRA, 18 DE JUNHO DE 2024</div><h1>Bom dia, Dr. Daniel</h1><p>Acompanhe seus casos e mantenha seu fluxo digital em dia.</p></div><button className="primary-button" onClick={onNewCase}><Plus />Novo caso</button></div><div className="stats-grid"><StatCard icon={Activity} label="Casos ativos" value={String(orders.filter((order) => order.status !== 'Concluído').length).padStart(2, '0')} trend="Sincronizado com a API" tone="blue"/><StatCard icon={Clock3} label="Aguardando ação" value={String(orders.filter((order) => order.status === 'Em Revisão').length).padStart(2, '0')} trend="Casos em revisão" tone="amber"/><StatCard icon={CircleDollarSign} label="Em garantia" value={orders[0]?.price ?? 'R$ 0,00'} trend="Última OS aberta" tone="green"/><StatCard icon={PackageCheck} label="Concluídos" value={String(orders.filter((order) => order.status === 'Concluído').length).padStart(2, '0')} trend="Total listado" tone="violet"/></div><div className="content-grid"><section className="panel orders-panel"><div className="panel-header"><div><h2>Ordens de serviço</h2><p>{usingFallback ? 'Exibindo dados locais enquanto a API não responde' : 'Seus casos mais recentes'}</p></div><button className="text-button">Ver todas <ArrowRight /></button></div><div className="filter-row"><div className="search-box"><Search /><input placeholder="Buscar por paciente ou OS..." /></div><button className="filter-button">Todos os status <ChevronDown /></button></div><div className="orders-list">{orders.map((order, index) => <button key={order.id} className="order-row" onClick={index === 0 ? onReview : undefined}><div className="order-leading"><div className={`order-icon ${index === 0 ? 'selected' : ''}`}><FileCheck2 /></div><div><strong>{order.id} <span>·</span> {order.patient}</strong><span>{order.work}</span></div></div><div className="order-meta"><StatusBadge status={order.status}/><span>{order.date}</span><strong>{order.price}</strong><ArrowRight /></div></button>)}</div></section><section className="panel quick-panel"><div className="panel-header"><div><h2>Atalhos rápidos</h2><p>O que você precisa fazer hoje?</p></div></div><div className="quick-actions"><button onClick={onNewCase}><div className="quick-icon blue"><Plus /></div><div><strong>Criar novo caso</strong><span>Envie um novo trabalho para a rede</span></div><ArrowRight /></button><button onClick={onReview}><div className="quick-icon purple"><GitCompare /></div><div><strong>Revisar caso</strong><span>{orders[0]?.id ?? 'OS'} aguarda sua aprovação</span></div><ArrowRight /></button><button><div className="quick-icon green"><CircleDollarSign /></div><div><strong>Consultar financeiro</strong><span>Saldo disponível: R$ 8.420</span></div><ArrowRight /></button></div><div className="tip-card"><Sparkles /><div><strong>Dica do dia</strong><p>Casos com fotos clínicas têm 24% menos ciclos de revisão.</p></div></div></section></div><section className="activity-section"><div className="panel-header"><div><h2>Atividade recente</h2><p>Atualizações do seu fluxo de trabalho</p></div><button className="text-button">Ver histórico <ArrowRight /></button></div><div className="activity-list"><div className="activity-item"><div className="activity-bullet green"><Check /></div><div><strong>{orders[0]?.id ?? 'OS'} foi atualizada</strong><span>{usingFallback ? 'A API será sincronizada quando estiver acessível' : 'Dados carregados da API'} · agora</span></div><div className="activity-avatar">RS</div></div><div className="activity-item"><div className="activity-bullet blue"><MessageCircle /></div><div><strong>Nova mensagem em {orders[0]?.id ?? 'OS'}</strong><span>Rafael Souza enviou uma atualização · há 4h</span></div><div className="activity-avatar warm">RS</div></div></div></section></div>
 }
 
-function NewCase({ onBack, onSubmit }: { onBack: () => void; onSubmit: () => void }) {
+function NewCase({ onBack, onSubmit }: { onBack: () => void; onSubmit: (request: CreateOrderRequest) => Promise<void> }) {
   const [selectedTeeth, setSelectedTeeth] = useState<string[]>(['16'])
   const [work, setWork] = useState('Coroa')
+  const [patient, setPatient] = useState('')
+  const [reference, setReference] = useState('')
   const [files, setFiles] = useState(['Preparo_16.stl', 'Antagonista_16.stl'])
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const toggleTooth = (tooth: string) => setSelectedTeeth((current) => current.includes(tooth) ? current.filter((item) => item !== tooth) : [...current, tooth])
   const total = useMemo(() => selectedTeeth.length * (work === 'Implante' ? 780 : work === 'Faceta' ? 310 : 460), [selectedTeeth.length, work])
-  return <div className="page-content form-page"><div className="breadcrumb"><button onClick={onBack}>Visão geral</button><ArrowRight /><span>Novo caso</span></div><div className="page-heading"><div><div className="eyebrow">NOVA ORDEM DE SERVIÇO</div><h1>Configurar novo caso</h1><p>Defina o escopo do trabalho e envie os arquivos do paciente.</p></div><div className="stepper"><span className="step active">1</span><span className="step-line"/><span className="step">2</span><span className="step-line"/><span className="step">3</span></div></div><div className="form-layout"><div className="form-main"><section className="panel form-card"><div className="section-heading"><div className="section-number">01</div><div><h2>Identificação do caso</h2><p>Informações básicas para o cadista</p></div></div><div className="field-grid"><label className="field"><span>Paciente <em>*</em></span><input placeholder="Nome ou código do paciente"/></label><label className="field"><span>Referência interna</span><input placeholder="Ex.: Caso família Silva"/></label></div></section><section className="panel form-card"><div className="section-heading"><div className="section-number">02</div><div><h2>Planejamento odontológico</h2><p>Selecione os dentes e o tipo de trabalho</p></div></div><div className="field-label">Odontograma FDI <span>· Selecione um ou mais dentes</span></div><div className="odontogram"><div className="arch-label"><span>MAXILA</span><span>MAXILA</span></div><div className="teeth-row">{teeth.slice(0,16).map((tooth) => <button key={tooth} className={selectedTeeth.includes(tooth) ? 'tooth selected' : 'tooth'} onClick={() => toggleTooth(tooth)}>{tooth}</button>)}</div><div className="midline"/><div className="teeth-row mandibular">{teeth.slice(16).map((tooth) => <button key={tooth} className={selectedTeeth.includes(tooth) ? 'tooth selected' : 'tooth'} onClick={() => toggleTooth(tooth)}>{tooth}</button>)}</div><div className="arch-label bottom"><span>MANDÍBULA</span><span>MANDÍBULA</span></div></div><div className="field-label work-label">Tipo de trabalho</div><div className="choice-grid">{['Coroa','Faceta','Implante'].map((item) => <button key={item} className={work === item ? 'choice-card selected' : 'choice-card'} onClick={() => setWork(item)}><div className="choice-symbol">{item === 'Coroa' ? '◒' : item === 'Faceta' ? '◓' : '⊙'}</div><div><strong>{item}</strong><span>{item === 'Coroa' ? 'Monolítica ou estratificada' : item === 'Faceta' ? 'Lente de contato dental' : 'Coroa sobre implante'}</span></div>{work === item && <CheckCircle2 />}</button>)}</div></section><section className="panel form-card"><div className="section-heading"><div className="section-number">03</div><div><h2>Parâmetros de produção</h2><p>Especificações para o desenho e fabricação</p></div></div><div className="field-grid three"><label className="field"><span>Escala de cor</span><select defaultValue="A1"><option>A1 — VITA Classical</option><option>A2 — VITA Classical</option><option>B1 — VITA Classical</option><option>D4 — VITA Classical</option></select></label><label className="field"><span>Espaço de cimento</span><div className="input-suffix"><input defaultValue="50"/><span>μm</span></div></label><label className="field"><span>Máquina de produção</span><select defaultValue="Zirkonzahn"><option>Zirkonzahn M5</option><option>Roland DWX-52D</option><option>Ivoclar PrograMill</option></select></label></div></section><section className="panel form-card"><div className="section-heading"><div className="section-number">04</div><div><h2>Arquivos do caso</h2><p>Formatos aceitos: .stl, .ply, .obj, .dcm</p></div></div><div className="upload-zone"><UploadCloud /><strong>Arraste os arquivos aqui ou <span>selecione do computador</span></strong><small>Até 500 MB por arquivo · Seus dados são criptografados</small></div><div className="file-checklist">{['Preparo','Antagonista','Registro de mordida'].map((label, index) => <div className="file-row" key={label}><div className={index < 2 ? 'file-status checked' : 'file-status'}>{index < 2 ? <Check /> : <FileUp />}</div><div><strong>{label}</strong><span>{files[index] || 'Arquivo obrigatório'}</span></div>{index < 2 ? <button className="remove-file" onClick={() => setFiles(files.filter((_, fileIndex) => fileIndex !== index))}><X /></button> : <button className="attach-button"><Plus />Anexar</button>}</div>)}</div></section></div><aside className="case-summary panel"><div className="summary-top"><span className="eyebrow">RESUMO DO CASO</span><div className="summary-icon"><LockKeyhole /></div></div><h2>OS-24092</h2><p className="summary-subtitle">Rascunho · Não enviado</p><div className="summary-divider"/><div className="summary-line"><span>Dentes selecionados</span><strong>{selectedTeeth.length > 0 ? selectedTeeth.join(', ') : 'Nenhum'}</strong></div><div className="summary-line"><span>Tipo de trabalho</span><strong>{work}</strong></div><div className="summary-line"><span>Arquivos anexados</span><strong>{files.length} de 3</strong></div><div className="escrow-box"><div><span>Valor em garantia (Escrow)</span><strong>R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></div><CircleDollarSign /></div><p className="escrow-note"><ShieldCheck /> O valor só é liberado após sua aprovação final.</p><button className="primary-button full" onClick={onSubmit}>Continuar e encontrar cadista <ArrowRight /></button><button className="secondary-button full" onClick={onBack}>Salvar como rascunho</button></aside></div></div>
+  const handleSubmit = async () => {
+    if (selectedTeeth.length === 0) {
+      setSubmitError('Selecione ao menos um dente FDI.')
+      return
+    }
+
+    setSubmitting(true)
+    setSubmitError(null)
+
+    try {
+      await onSubmit({
+        userId: FALLBACK_USER_ID,
+        title: patient.trim() || 'Paciente sem identificação',
+        description: reference.trim() || undefined,
+        items: selectedTeeth.map((tooth) => ({
+          toothNumber: Number(tooth),
+          serviceType: work,
+          notes: files.length > 0 ? `Arquivos anexados: ${files.join(', ')}` : undefined,
+        })),
+      })
+    } catch {
+      setSubmitError('Não foi possível enviar o caso agora.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return <div className="page-content form-page"><div className="breadcrumb"><button onClick={onBack}>Visão geral</button><ArrowRight /><span>Novo caso</span></div><div className="page-heading"><div><div className="eyebrow">NOVA ORDEM DE SERVIÇO</div><h1>Configurar novo caso</h1><p>Defina o escopo do trabalho e envie os arquivos do paciente.</p></div><div className="stepper"><span className="step active">1</span><span className="step-line"/><span className="step">2</span><span className="step-line"/><span className="step">3</span></div></div><div className="form-layout"><div className="form-main"><section className="panel form-card"><div className="section-heading"><div className="section-number">01</div><div><h2>Identificação do caso</h2><p>Informações básicas para o cadista</p></div></div><div className="field-grid"><label className="field"><span>Paciente <em>*</em></span><input value={patient} onChange={(event) => setPatient(event.target.value)} placeholder="Nome ou código do paciente"/></label><label className="field"><span>Referência interna</span><input value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Ex.: Caso família Silva"/></label></div></section><section className="panel form-card"><div className="section-heading"><div className="section-number">02</div><div><h2>Planejamento odontológico</h2><p>Selecione os dentes e o tipo de trabalho</p></div></div><div className="field-label">Odontograma FDI <span>· Selecione um ou mais dentes</span></div><div className="odontogram"><div className="arch-label"><span>MAXILA</span><span>MAXILA</span></div><div className="teeth-row">{teeth.slice(0,16).map((tooth) => <button key={tooth} type="button" className={selectedTeeth.includes(tooth) ? 'tooth selected' : 'tooth'} onClick={() => toggleTooth(tooth)}>{tooth}</button>)}</div><div className="midline"/><div className="teeth-row mandibular">{teeth.slice(16).map((tooth) => <button key={tooth} type="button" className={selectedTeeth.includes(tooth) ? 'tooth selected' : 'tooth'} onClick={() => toggleTooth(tooth)}>{tooth}</button>)}</div><div className="arch-label bottom"><span>MANDÍBULA</span><span>MANDÍBULA</span></div></div><div className="field-label work-label">Tipo de trabalho</div><div className="choice-grid">{['Coroa','Faceta','Implante'].map((item) => <button key={item} type="button" className={work === item ? 'choice-card selected' : 'choice-card'} onClick={() => setWork(item)}><div className="choice-symbol">{item === 'Coroa' ? '◒' : item === 'Faceta' ? '◓' : '⊙'}</div><div><strong>{item}</strong><span>{item === 'Coroa' ? 'Monolítica ou estratificada' : item === 'Faceta' ? 'Lente de contato dental' : 'Coroa sobre implante'}</span></div>{work === item && <CheckCircle2 />}</button>)}</div></section><section className="panel form-card"><div className="section-heading"><div className="section-number">03</div><div><h2>Parâmetros de produção</h2><p>Especificações para o desenho e fabricação</p></div></div><div className="field-grid three"><label className="field"><span>Escala de cor</span><select defaultValue="A1"><option>A1 — VITA Classical</option><option>A2 — VITA Classical</option><option>B1 — VITA Classical</option><option>D4 — VITA Classical</option></select></label><label className="field"><span>Espaço de cimento</span><div className="input-suffix"><input defaultValue="50"/><span>μm</span></div></label><label className="field"><span>Máquina de produção</span><select defaultValue="Zirkonzahn"><option>Zirkonzahn M5</option><option>Roland DWX-52D</option><option>Ivoclar PrograMill</option></select></label></div></section><section className="panel form-card"><div className="section-heading"><div className="section-number">04</div><div><h2>Arquivos do caso</h2><p>Formatos aceitos: .stl, .ply, .obj, .dcm</p></div></div><div className="upload-zone"><UploadCloud /><strong>Arraste os arquivos aqui ou <span>selecione do computador</span></strong><small>Até 500 MB por arquivo · Seus dados são criptografados</small></div><div className="file-checklist">{['Preparo','Antagonista','Registro de mordida'].map((label, index) => <div className="file-row" key={label}><div className={index < 2 ? 'file-status checked' : 'file-status'}>{index < 2 ? <Check /> : <FileUp />}</div><div><strong>{label}</strong><span>{files[index] || 'Arquivo obrigatório'}</span></div>{index < 2 ? <button className="remove-file" onClick={() => setFiles(files.filter((_, fileIndex) => fileIndex !== index))}><X /></button> : <button className="attach-button"><Plus />Anexar</button>}</div>)}</div></section></div><aside className="case-summary panel"><div className="summary-top"><span className="eyebrow">RESUMO DO CASO</span><div className="summary-icon"><LockKeyhole /></div></div><h2>OS-24092</h2><p className="summary-subtitle">Rascunho · Não enviado</p><div className="summary-divider"/><div className="summary-line"><span>Dentes selecionados</span><strong>{selectedTeeth.length > 0 ? selectedTeeth.join(', ') : 'Nenhum'}</strong></div><div className="summary-line"><span>Tipo de trabalho</span><strong>{work}</strong></div><div className="summary-line"><span>Arquivos anexados</span><strong>{files.length} de 3</strong></div><div className="escrow-box"><div><span>Valor em garantia (Escrow)</span><strong>R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></div><CircleDollarSign /></div><p className="escrow-note"><ShieldCheck /> O valor só é liberado após sua aprovação final.</p>{submitError && <p className="escrow-note">{submitError}</p>}<button className="primary-button full" onClick={handleSubmit} disabled={submitting}>{submitting ? 'Enviando caso...' : 'Continuar e encontrar cadista'} <ArrowRight /></button><button className="secondary-button full" onClick={onBack}>Salvar como rascunho</button></aside></div></div>
 }
 
 function ReviewWorkspace({ onBack }: { onBack: () => void }) {
@@ -109,6 +195,39 @@ export default function OdontoMarketplace() {
   const [role, setRole] = useState<'Dentista' | 'Cadista'>('Dentista')
   const [active, setActive] = useState('Visão geral')
   const [dark, setDark] = useState(false)
-  const screen = active === 'Novo caso' ? <NewCase onBack={() => setActive('Visão geral')} onSubmit={() => setActive('Visão geral')} /> : active === 'Minhas OS' ? <ReviewWorkspace onBack={() => setActive('Visão geral')} /> : role === 'Cadista' ? <DesignerBoard /> : <Dashboard onNewCase={() => setActive('Novo caso')} onReview={() => setActive('Minhas OS')} />
-  return <div className={dark ? 'app-shell dark' : 'app-shell'}><Header role={role} setRole={(nextRole) => { setRole(nextRole); setActive('Visão geral') }} dark={dark} setDark={setDark}/><div className="app-body"><Sidebar active={active} setActive={setActive} role={role}/><main className="main-area">{screen}</main></div></div>
+  const [orders, setOrders] = useState<DashboardOrder[]>(fallbackOrders)
+  const [usingFallback, setUsingFallback] = useState(false)
+
+  const loadOrders = async () => {
+    try {
+      const apiOrders = await getOrders()
+      setOrders(apiOrders.length > 0 ? apiOrders.map(mapOrder) : [])
+      setUsingFallback(false)
+    } catch {
+      setOrders(fallbackOrders)
+      setUsingFallback(true)
+    }
+  }
+
+  useEffect(() => {
+    void loadOrders()
+  }, [])
+
+  const handleCreateOrder = async (request: CreateOrderRequest) => {
+    const createdOrder = await createOrder(request)
+    setOrders((current) => [mapOrder(createdOrder), ...current.filter((order) => order.id !== mapOrder(createdOrder).id)])
+    setUsingFallback(false)
+    await loadOrders()
+    setActive('Visão geral')
+  }
+
+  const screen = active === 'Novo caso'
+    ? <NewCase onBack={() => setActive('Visão geral')} onSubmit={handleCreateOrder} />
+    : active === 'Minhas OS'
+      ? <ReviewWorkspace onBack={() => setActive('Visão geral')} />
+      : role === 'Cadista'
+        ? <DesignerBoard />
+        : <Dashboard orders={orders} usingFallback={usingFallback} onNewCase={() => setActive('Novo caso')} onReview={() => setActive('Minhas OS')} />
+
+  return <div className={dark ? 'app-shell dark' : 'app-shell'}><Header role={role} setRole={(nextRole) => { setRole(nextRole); setActive('Visão geral') }} dark={dark} setDark={setDark}/><div className="app-body"><Sidebar active={active} setActive={setActive} role={role} orderCount={orders.length}/><main className="main-area">{screen}</main></div></div>
 }
