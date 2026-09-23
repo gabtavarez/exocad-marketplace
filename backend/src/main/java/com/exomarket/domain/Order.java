@@ -41,6 +41,9 @@ public class Order {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(name = "revision_feedback", columnDefinition = "TEXT")
+    private String revisionFeedback;
+
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount = BigDecimal.ZERO;
 

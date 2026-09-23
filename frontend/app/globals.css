@@ -44,3 +44,12 @@ button { cursor: pointer; }
 .attachment-tabs { display: flex; flex-direction: column; gap: 18px; padding: 16px; overflow: auto; }
 .section-heading.compact { margin-bottom: 12px; }
 .delivery-upload { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
+
+.case-timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 0 18px; }
+.timeline-step { border: 1px solid var(--line); border-radius: 7px; padding: 9px; display: flex; align-items: center; gap: 8px; color: var(--muted); background: var(--surface); }
+.timeline-step span { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-soft); font-size: 10px; font-weight: 800; }
+.timeline-step strong { font-size: 10px; }
+.timeline-step.active { border-color: #b5e8d6; background: var(--green-soft); color: var(--green); }
+.timeline-step.revision { border-color: #f3cf94; background: #fff7e8; color: #b7791f; }
+.revision-field { margin-top: 14px; }
+.revision-field textarea { border: 1px solid var(--line); border-radius: 7px; min-height: 88px; padding: 10px; resize: vertical; font: inherit; font-size: 11px; }

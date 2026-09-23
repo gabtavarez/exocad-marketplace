@@ -4,6 +4,7 @@ import com.exomarket.OrderStatus;
 import com.exomarket.dto.CreateOrderRequest;
 import com.exomarket.dto.CreateUploadUrlRequest;
 import com.exomarket.dto.OrderResponse;
+import com.exomarket.dto.RequestRevisionRequest;
 import com.exomarket.dto.UploadUrlResponse;
 import com.exomarket.service.FileStorageService;
 import com.exomarket.service.OrderService;
@@ -47,6 +48,29 @@ public class OrderController {
     @GetMapping("/{id}")
     public OrderResponse getById(@PathVariable Long id) {
         return orderService.getById(id);
+    }
+
+    @PostMapping("/{id}/accept")
+    public OrderResponse accept(@PathVariable Long id) {
+        return orderService.accept(id);
+    }
+
+    @PostMapping("/{id}/submit-delivery")
+    public OrderResponse submitDelivery(@PathVariable Long id) {
+        return orderService.submitDelivery(id);
+    }
+
+    @PostMapping("/{id}/approve")
+    public OrderResponse approve(@PathVariable Long id) {
+        return orderService.approve(id);
+    }
+
+    @PostMapping("/{id}/request-revision")
+    public OrderResponse requestRevision(
+            @PathVariable Long id,
+            @Valid @RequestBody RequestRevisionRequest request
+    ) {
+        return orderService.requestRevision(id, request.feedback());
     }
 
     @PostMapping("/{orderId}/upload-url")

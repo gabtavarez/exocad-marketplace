@@ -40,6 +40,31 @@ export function createOrder(data: CreateOrderRequest): Promise<OrderResponse> {
   })
 }
 
+export function acceptOrder(id: string | number): Promise<OrderResponse> {
+  return request<OrderResponse>(`/api/orders/${id}/accept`, {
+    method: 'POST',
+  })
+}
+
+export function submitOrderDelivery(id: string | number): Promise<OrderResponse> {
+  return request<OrderResponse>(`/api/orders/${id}/submit-delivery`, {
+    method: 'POST',
+  })
+}
+
+export function approveOrder(id: string | number): Promise<OrderResponse> {
+  return request<OrderResponse>(`/api/orders/${id}/approve`, {
+    method: 'POST',
+  })
+}
+
+export function requestOrderRevision(id: string | number, feedback: string): Promise<OrderResponse> {
+  return request<OrderResponse>(`/api/orders/${id}/request-revision`, {
+    method: 'POST',
+    body: JSON.stringify({ feedback }),
+  })
+}
+
 export function createUploadUrl(orderId: string | number, data: CreateUploadUrlRequest): Promise<UploadUrlResponse> {
   return request<UploadUrlResponse>(`/api/orders/${orderId}/upload-url`, {
     method: 'POST',

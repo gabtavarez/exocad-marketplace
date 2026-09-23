@@ -1,11 +1,13 @@
 package com.exomarket.service;
 
+import com.exomarket.AttachmentStage;
 import com.exomarket.OrderStatus;
 import com.exomarket.domain.Order;
 import com.exomarket.domain.OrderItem;
 import com.exomarket.dto.CreateOrderRequest;
 import com.exomarket.dto.OrderResponse;
 import com.exomarket.repository.OrderRepository;
+import com.exomarket.repository.OrderAttachmentRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
 import java.util.List;
@@ -18,9 +20,11 @@ public class OrderService {
     private static final BigDecimal MOCK_PRICE_PER_ITEM = new BigDecimal("150.00");
 
     private final OrderRepository orderRepository;
+    private final OrderAttachmentRepository orderAttachmentRepository;
 
-    public OrderService(OrderRepository orderRepository) {
+    public OrderService(OrderRepository orderRepository, OrderAttachmentRepository orderAttachmentRepository) {
         this.orderRepository = orderRepository;
+        this.orderAttachmentRepository = orderAttachmentRepository;
     }
 
     @Transactional
@@ -61,6 +65,66 @@ public class OrderService {
         return orderRepository.findById(id)
                 .map(this::toResponse)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
+    }
+
+    @Transactional
+    public OrderResponse accept(Long id) {
+        Order order = getOrderOrThrow(id);
+        transition(order, OrderStatus.OPEN, OrderStatus.IN_PROGRESS);
+        return toResponse(orderRepository.save(order));
+    }
+
+    @Transactional
+    public OrderResponse submitDelivery(Long id) {
+        Order order = getOrderOrThrow(id);
+        transition(order, OrderStatus.IN_PROGRESS, OrderStatus.IN_REVIEW);
+
+        if (!hasCadDeliveryStl(id)) {
+            throw new IllegalStateException("Cannot submit delivery without a CAD delivery STL");
+        }
+
+        return toResponse(orderRepository.save(order));
+    }
+
+    @Transactional
+    public OrderResponse approve(Long id) {
+        Order order = getOrderOrThrow(id);
+        transition(order, OrderStatus.IN_REVIEW, OrderStatus.COMPLETED);
+
+        if (!hasCadDeliveryStl(id)) {
+            throw new IllegalStateException("Cannot approve an order without a CAD delivery STL");
+        }
+
+        return toResponse(orderRepository.save(order));
+    }
+
+    @Transactional
+    public OrderResponse requestRevision(Long id, String feedback) {
+        Order order = getOrderOrThrow(id);
+        transition(order, OrderStatus.IN_REVIEW, OrderStatus.REVISION_REQUESTED);
+        order.setRevisionFeedback(feedback);
+        return toResponse(orderRepository.save(order));
+    }
+
+    private Order getOrderOrThrow(Long id) {
+        return orderRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
+    }
+
+    private void transition(Order order, OrderStatus expected, OrderStatus next) {
+        if (order.getStatus() != expected) {
+            throw new IllegalStateException("Invalid status transition from " + order.getStatus() + " to " + next);
+        }
+
+        order.setStatus(next);
+    }
+
+    private boolean hasCadDeliveryStl(Long orderId) {
+        return orderAttachmentRepository.existsByOrderIdAndStageAndFileNamePattern(
+                orderId,
+                AttachmentStage.CAD_DELIVERY,
+                "%.stl"
+        );
     }
 
     private BigDecimal calculateTotalAmount(List<CreateOrderRequest.CreateOrderItemRequest> items) {

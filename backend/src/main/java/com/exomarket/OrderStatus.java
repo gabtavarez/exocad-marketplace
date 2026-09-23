@@ -4,6 +4,7 @@ public enum OrderStatus {
     DRAFT,
     OPEN,
     IN_PROGRESS,
-    REVIEW,
-    COMPLETED
+    IN_REVIEW,
+    COMPLETED,
+    REVISION_REQUESTED
 }

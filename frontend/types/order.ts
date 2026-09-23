@@ -1,4 +1,4 @@
-export type OrderStatus = 'OPEN' | 'IN_PROGRESS' | 'REVIEW' | 'COMPLETED'
+export type OrderStatus = 'OPEN' | 'IN_PROGRESS' | 'IN_REVIEW' | 'COMPLETED' | 'REVISION_REQUESTED'
 export type AttachmentStage = 'CLINICAL_INPUT' | 'CAD_DELIVERY'
 
 export type ToothItem = {
