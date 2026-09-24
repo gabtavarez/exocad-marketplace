@@ -41,6 +41,7 @@ import {
 import Clinical3DViewer from '@/components/Clinical3DViewer'
 import { useAuth } from '@/contexts/AuthContext'
 import { getFinancialStatement, getFinancialSummary } from '@/services/financialService'
+import { getNotifications, getUnreadNotificationCount, markAllNotificationsRead, markNotificationRead } from '@/services/notificationService'
 import {
   acceptOrderApplication,
   applyToOrder,
@@ -61,6 +62,7 @@ import {
 } from '@/services/orderService'
 import type { AttachmentStage, CreateOrderRequest, OrderApplication, OrderAttachment, OrderMessage, OrderResponse, OrderStatus } from '@/types/order'
 import type { FinancialSummary, WalletTransaction, WalletTransactionType } from '@/types/financial'
+import type { Notification } from '@/types/notification'
 
 type RoleLabel = 'Dentista' | 'Cadista'
 type CaseFile = {
@@ -132,8 +134,65 @@ function UserAvatar({ name, avatarUrl, className }: { name: string; avatarUrl?: 
   return <span className={className}>{avatarUrl ? <img src={avatarUrl} alt="" /> : initials}</span>
 }
 
-function Header({ role, userName, avatarUrl, onProfile, onLogout }: { role: RoleLabel; userName: string; avatarUrl?: string; onProfile: () => void; onLogout: () => void }) {
-  return <header className="topbar"><div className="topbar-left"><button className="mobile-menu" aria-label="Abrir menu"><PanelLeft /></button><Brand /></div><div className="topbar-actions"><div className="role-switcher" aria-label="Perfil autenticado"><button className="active" type="button">{role === 'Dentista' ? <UserRound /> : <UsersRound />}{role}</button></div><button className="notification-button" aria-label="Notificações"><Bell /><span /></button><button className="profile-trigger" onClick={onProfile} title="Editar perfil"><UserAvatar name={userName} avatarUrl={avatarUrl} className="profile-avatar" /><strong>{userName}</strong></button><button className="icon-button logout-button" aria-label="Sair" title="Sair e trocar de conta" onClick={onLogout}><LogOut /></button></div></header>
+function relativeTime(value: string) {
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000))
+  if (seconds < 60) return 'agora'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `há ${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `há ${hours} h`
+  return `há ${Math.floor(hours / 24)} d`
+}
+
+function NotificationBell({ onOpenLink }: { onOpenLink: (linkUrl?: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [loading, setLoading] = useState(false)
+
+  const refreshCount = async () => {
+    try { setUnreadCount((await getUnreadNotificationCount()).unreadCount) } catch { /* mantém o último valor */ }
+  }
+
+  useEffect(() => {
+    void refreshCount()
+    const interval = window.setInterval(() => void refreshCount(), 30000)
+    return () => window.clearInterval(interval)
+  }, [])
+
+  const toggle = async () => {
+    const nextOpen = !open
+    setOpen(nextOpen)
+    if (nextOpen) {
+      setLoading(true)
+      try { setNotifications(await getNotifications()) } catch { setNotifications([]) } finally { setLoading(false) }
+    }
+  }
+
+  const openNotification = async (notification: Notification) => {
+    if (!notification.read) {
+      try {
+        await markNotificationRead(notification.id)
+        setUnreadCount((count) => Math.max(0, count - 1))
+      } catch { /* a navegação continua mesmo sem atualizar a leitura */ }
+    }
+    setOpen(false)
+    onOpenLink(notification.linkUrl)
+  }
+
+  const markAll = async () => {
+    try {
+      await markAllNotificationsRead()
+      setUnreadCount(0)
+      setNotifications((items) => items.map((item) => ({ ...item, read: true })))
+    } catch { /* mantém o estado atual para uma nova tentativa */ }
+  }
+
+  return <div className="notification-center"><button className="notification-button" aria-label="Notificações" aria-expanded={open} onClick={() => void toggle()}><Bell />{unreadCount > 0 && <span className="notification-count">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button>{open && <div className="notification-popover"><div className="notification-heading"><strong>Notificações</strong><button onClick={() => void markAll()} disabled={unreadCount === 0}>Marcar todas como lidas</button></div><div className="notification-list">{loading ? <div className="notification-empty">Carregando...</div> : notifications.length === 0 ? <div className="notification-empty">Nenhuma notificação no momento</div> : notifications.map((notification) => <button className={notification.read ? 'notification-item' : 'notification-item unread'} key={notification.id} onClick={() => void openNotification(notification)}><span className="unread-indicator"/><div><strong>{notification.title}</strong><p>{notification.message}</p><time>{relativeTime(notification.createdAt)}</time></div></button>)}</div></div>}</div>
+}
+
+function Header({ role, userName, avatarUrl, onProfile, onLogout, onNotificationLink }: { role: RoleLabel; userName: string; avatarUrl?: string; onProfile: () => void; onLogout: () => void; onNotificationLink: (linkUrl?: string) => void }) {
+  return <header className="topbar"><div className="topbar-left"><button className="mobile-menu" aria-label="Abrir menu"><PanelLeft /></button><Brand /></div><div className="topbar-actions"><div className="role-switcher" aria-label="Perfil autenticado"><button className="active" type="button">{role === 'Dentista' ? <UserRound /> : <UsersRound />}{role}</button></div><NotificationBell onOpenLink={onNotificationLink} /><button className="profile-trigger" onClick={onProfile} title="Editar perfil"><UserAvatar name={userName} avatarUrl={avatarUrl} className="profile-avatar" /><strong>{userName}</strong></button><button className="icon-button logout-button" aria-label="Sair" title="Sair e trocar de conta" onClick={onLogout}><LogOut /></button></div></header>
 }
 
 function Sidebar({ active, setActive, role, orderCount, userName, avatarUrl, onLogout, onProfile, onComingSoon }: { active: string; setActive: (label: string) => void; role: RoleLabel; orderCount: number; userName: string; avatarUrl?: string; onLogout: () => void; onProfile: () => void; onComingSoon: (feature: string) => void }) {
@@ -560,6 +619,18 @@ export default function OdontoMarketplace() {
     await loadOrders()
   }
 
+  const openNotificationLink = async (linkUrl?: string) => {
+    const orderId = linkUrl?.match(/^\/orders\/(\d+)$/)?.[1]
+    if (!orderId) return
+    try {
+      const order = await getOrderById(orderId)
+      setSelectedOrder(order)
+      setActive('Meus Casos')
+    } catch {
+      await loadOrders()
+    }
+  }
+
   const screen = active === 'Financeiro'
     ? <FinancialPage role={role} />
     : active === 'Configurações'
@@ -572,5 +643,5 @@ export default function OdontoMarketplace() {
         ? <DesignerBoard orders={orders} onOpenCase={openCase} onApply={handleApply} />
         : <Dashboard orders={orders} usingFallback={usingFallback} onNewCase={() => setActive('Novo Caso')} onOpenCase={openCase} />
 
-  return <div className="app-shell"><Header role={role} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onProfile={() => setProfileOpen(true)} onLogout={signOut} /><div className="app-body"><Sidebar active={active} setActive={setActive} role={role} orderCount={orders.length} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onLogout={signOut} onProfile={() => setProfileOpen(true)} onComingSoon={setComingSoon} /><main className="main-area">{screen}</main></div>{profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}{comingSoon && <SimpleModal title={comingSoon} onClose={() => setComingSoon(null)}><div className="coming-soon"><Sparkles /><strong>Em breve</strong><p>Estamos preparando esta área para uma próxima versão.</p><button className="primary-button" onClick={() => setComingSoon(null)}>Entendi</button></div></SimpleModal>}</div>
+  return <div className="app-shell"><Header role={role} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onProfile={() => setProfileOpen(true)} onLogout={signOut} onNotificationLink={(linkUrl) => void openNotificationLink(linkUrl)} /><div className="app-body"><Sidebar active={active} setActive={setActive} role={role} orderCount={orders.length} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onLogout={signOut} onProfile={() => setProfileOpen(true)} onComingSoon={setComingSoon} /><main className="main-area">{screen}</main></div>{profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}{comingSoon && <SimpleModal title={comingSoon} onClose={() => setComingSoon(null)}><div className="coming-soon"><Sparkles /><strong>Em breve</strong><p>Estamos preparando esta área para uma próxima versão.</p><button className="primary-button" onClick={() => setComingSoon(null)}>Entendi</button></div></SimpleModal>}</div>
 }

@@ -6,6 +6,7 @@ import com.exomarket.repository.OrderMessageRepository;
 import com.exomarket.repository.OrderApplicationRepository;
 import com.exomarket.repository.UserRepository;
 import com.exomarket.repository.WalletTransactionRepository;
+import com.exomarket.repository.NotificationRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -36,6 +37,9 @@ class ExocadMarketplaceApiApplicationTests {
 
 	@MockitoBean
 	private WalletTransactionRepository walletTransactionRepository;
+
+	@MockitoBean
+	private NotificationRepository notificationRepository;
 
 	@Test
 	void contextLoads() {

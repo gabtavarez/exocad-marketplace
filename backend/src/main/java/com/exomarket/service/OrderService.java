@@ -29,17 +29,20 @@ public class OrderService {
     private final OrderAttachmentRepository orderAttachmentRepository;
     private final OrderApplicationRepository orderApplicationRepository;
     private final FinancialService financialService;
+    private final NotificationService notificationService;
 
     public OrderService(
             OrderRepository orderRepository,
             OrderAttachmentRepository orderAttachmentRepository,
             OrderApplicationRepository orderApplicationRepository,
-            FinancialService financialService
+            FinancialService financialService,
+            NotificationService notificationService
     ) {
         this.orderRepository = orderRepository;
         this.orderAttachmentRepository = orderAttachmentRepository;
         this.orderApplicationRepository = orderApplicationRepository;
         this.financialService = financialService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -103,7 +106,14 @@ public class OrderService {
         if (!hasCadDeliveryStl(id)) {
             throw new IllegalStateException("Cannot submit delivery without a CAD delivery STL");
         }
-        return toResponse(orderRepository.save(order), currentUser);
+        Order saved = orderRepository.save(order);
+        notificationService.notify(
+                order.getUserId(),
+                "Arquivos CAD enviados para revisão no Caso #" + id,
+                "O cadista concluiu a entrega e aguarda sua análise.",
+                "/orders/" + id
+        );
+        return toResponse(saved, currentUser);
     }
 
     @Transactional
@@ -117,6 +127,12 @@ public class OrderService {
         }
         Order saved = orderRepository.save(order);
         financialService.release(saved);
+        notificationService.notify(
+                order.getDesignerId(),
+                "Design aprovado! Saldo liberado no Caso #" + id,
+                "O dentista aprovou a entrega e o repasse foi lançado no seu saldo.",
+                "/orders/" + id
+        );
         return toResponse(saved, currentUser);
     }
 

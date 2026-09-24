@@ -26,19 +26,22 @@ public class OrderApplicationService {
     private final UserRepository userRepository;
     private final OrderService orderService;
     private final FinancialService financialService;
+    private final NotificationService notificationService;
 
     public OrderApplicationService(
             OrderApplicationRepository applicationRepository,
             OrderRepository orderRepository,
             UserRepository userRepository,
             OrderService orderService,
-            FinancialService financialService
+            FinancialService financialService,
+            NotificationService notificationService
     ) {
         this.applicationRepository = applicationRepository;
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
         this.orderService = orderService;
         this.financialService = financialService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -58,7 +61,14 @@ public class OrderApplicationService {
                     OrderApplication application = new OrderApplication();
                     application.setOrder(order);
                     application.setDesigner(designer);
-                    return toResponse(applicationRepository.save(application));
+                    OrderApplication saved = applicationRepository.save(application);
+                    notificationService.notify(
+                            order.getUserId(),
+                            "Nova candidatura recebida para o Caso #" + orderId,
+                            designer.getName() + " demonstrou interesse no seu caso.",
+                            "/orders/" + orderId
+                    );
+                    return toResponse(saved);
                 });
     }
 
@@ -99,6 +109,12 @@ public class OrderApplicationService {
         order.setStatus(OrderStatus.IN_PROGRESS);
         orderRepository.save(order);
         financialService.hold(order);
+        notificationService.notify(
+                accepted.getDesigner().getId(),
+                "Você foi escolhido para o Caso #" + orderId + "!",
+                "O dentista aceitou sua candidatura. O caso já está disponível para produção.",
+                "/orders/" + orderId
+        );
         return orderService.getById(orderId, currentUser);
     }
 

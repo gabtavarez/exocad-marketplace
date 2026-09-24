@@ -21,15 +21,18 @@ public class OrderMessageService {
     private final OrderRepository orderRepository;
     private final OrderMessageRepository messageRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     public OrderMessageService(
             OrderRepository orderRepository,
             OrderMessageRepository messageRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            NotificationService notificationService
     ) {
         this.orderRepository = orderRepository;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional(readOnly = true)
@@ -56,7 +59,15 @@ public class OrderMessageService {
         message.setSender(sender);
         message.setContent(content.trim());
 
-        return toResponse(messageRepository.save(message));
+        OrderMessage saved = messageRepository.save(message);
+        Long recipientId = currentUser.role() == UserRole.DESIGNER ? order.getUserId() : order.getDesignerId();
+        notificationService.notify(
+                recipientId,
+                "Nova mensagem no Caso #" + orderId,
+                sender.getName() + ": " + summarize(message.getContent()),
+                "/orders/" + orderId
+        );
+        return toResponse(saved);
     }
 
     private Order getOrderOrThrow(Long orderId) {
@@ -85,5 +96,9 @@ public class OrderMessageService {
                 message.getContent(),
                 message.getCreatedAt()
         );
+    }
+
+    private String summarize(String content) {
+        return content.length() <= 120 ? content : content.substring(0, 117) + "...";
     }
 }
