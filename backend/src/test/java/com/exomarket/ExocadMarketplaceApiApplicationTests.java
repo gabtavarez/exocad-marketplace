@@ -2,6 +2,8 @@ package com.exomarket;
 
 import com.exomarket.repository.OrderRepository;
 import com.exomarket.repository.OrderAttachmentRepository;
+import com.exomarket.repository.OrderMessageRepository;
+import com.exomarket.repository.OrderApplicationRepository;
 import com.exomarket.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,6 +23,12 @@ class ExocadMarketplaceApiApplicationTests {
 
 	@MockitoBean
 	private OrderAttachmentRepository orderAttachmentRepository;
+
+	@MockitoBean
+	private OrderMessageRepository orderMessageRepository;
+
+	@MockitoBean
+	private OrderApplicationRepository orderApplicationRepository;
 
 	@MockitoBean
 	private UserRepository userRepository;

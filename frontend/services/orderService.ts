@@ -1,4 +1,4 @@
-import type { AttachmentDownloadUrlResponse, CreateOrderRequest, CreateUploadUrlRequest, OrderResponse, OrderStatus, UploadUrlResponse } from '@/types/order'
+import type { AttachmentDownloadUrlResponse, CreateOrderRequest, CreateUploadUrlRequest, OrderApplication, OrderMessage, OrderResponse, OrderStatus, UploadUrlResponse } from '@/types/order'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080'
 const TOKEN_KEY = 'exomarket.auth.token'
@@ -48,8 +48,18 @@ export function createOrder(data: CreateOrderRequest): Promise<OrderResponse> {
   })
 }
 
-export function acceptOrder(id: string | number): Promise<OrderResponse> {
-  return request<OrderResponse>(`/api/orders/${id}/accept`, {
+export function applyToOrder(id: string | number): Promise<OrderApplication> {
+  return request<OrderApplication>(`/api/orders/${id}/applications`, {
+    method: 'POST',
+  })
+}
+
+export function getOrderApplications(id: string | number): Promise<OrderApplication[]> {
+  return request<OrderApplication[]>(`/api/orders/${id}/applications`)
+}
+
+export function acceptOrderApplication(id: string | number, applicationId: string | number): Promise<OrderResponse> {
+  return request<OrderResponse>(`/api/orders/${id}/applications/${applicationId}/accept`, {
     method: 'POST',
   })
 }
@@ -88,6 +98,21 @@ export function completeAttachmentUpload(orderId: string | number, attachmentId:
 
 export function getAttachmentDownloadUrl(orderId: string | number, attachmentId: string | number): Promise<AttachmentDownloadUrlResponse> {
   return request<AttachmentDownloadUrlResponse>(`/api/orders/${orderId}/attachments/${attachmentId}/download-url`)
+}
+
+export function deleteAttachment(orderId: string | number, attachmentId: string | number): Promise<void> {
+  return request<void>(`/api/orders/${orderId}/attachments/${attachmentId}`, { method: 'DELETE' })
+}
+
+export function getOrderMessages(orderId: string | number): Promise<OrderMessage[]> {
+  return request<OrderMessage[]>(`/api/orders/${orderId}/messages`)
+}
+
+export function sendOrderMessage(orderId: string | number, content: string): Promise<OrderMessage> {
+  return request<OrderMessage>(`/api/orders/${orderId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  })
 }
 
 export async function uploadFileToStorage(uploadUrl: string, file: File): Promise<void> {

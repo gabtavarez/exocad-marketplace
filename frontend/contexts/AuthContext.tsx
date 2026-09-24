@@ -16,6 +16,7 @@ type AuthContextValue = {
   signUp: (data: RegisterRequest) => Promise<void>
   signInWithGoogle: (credential: string, role: UserRole) => Promise<void>
   signOut: () => void
+  updateProfile: (name: string, avatarFile?: File) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -61,6 +62,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signIn: async (email, password) => persist(await authService.login(email, password)),
     signUp: async (data) => persist(await authService.register(data)),
     signInWithGoogle: async (credential, role) => persist(await authService.loginWithGoogle(credential, role)),
+    updateProfile: async (name, avatarFile) => {
+      const avatarUrl = avatarFile ? await authService.uploadAvatar(avatarFile) : user?.avatarUrl
+      const updatedUser = await authService.updateProfile(name, avatarUrl)
+      localStorage.setItem(USER_KEY, JSON.stringify(updatedUser))
+      setUser(updatedUser)
+    },
     signOut: () => {
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(USER_KEY)

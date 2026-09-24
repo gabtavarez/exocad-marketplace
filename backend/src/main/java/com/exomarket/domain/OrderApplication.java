@@ -1,13 +1,16 @@
 package com.exomarket.domain;
 
-import com.exomarket.UserRole;
+import com.exomarket.ApplicationStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 import lombok.Getter;
@@ -16,35 +19,25 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "users")
-public class User {
+@Table(name = "order_applications")
+public class OrderApplication {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "full_name", nullable = false)
-    private String name;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "order_id", nullable = false)
+    private Order order;
 
-    @Column(nullable = false, unique = true)
-    private String email;
-
-    @Column(name = "password_hash")
-    private String password;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "designer_id", nullable = false)
+    private User designer;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 32)
-    private UserRole role;
-
-    @Column(name = "google_id", unique = true)
-    private String googleId;
-
-    @Column(name = "avatar_url", length = 2048)
-    private String avatarUrl;
+    @Column(nullable = false, length = 16)
+    private ApplicationStatus status = ApplicationStatus.PENDING;
 
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
-
-    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
-    private OffsetDateTime updatedAt;
 }

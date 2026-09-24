@@ -1,5 +1,6 @@
 export type OrderStatus = 'OPEN' | 'IN_PROGRESS' | 'IN_REVIEW' | 'COMPLETED' | 'REVISION_REQUESTED'
 export type AttachmentStage = 'CLINICAL_INPUT' | 'CAD_DELIVERY'
+export type ApplicationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED'
 
 export type ToothItem = {
   toothNumber: number
@@ -33,6 +34,7 @@ export type OrderResponse = {
   items: OrderItemResponse[]
   attachments: OrderAttachment[]
   revisionFeedback?: string
+  applicationStatus?: ApplicationStatus
 }
 
 export type CreateUploadUrlRequest = {
@@ -64,5 +66,26 @@ export type OrderAttachment = {
 export type AttachmentDownloadUrlResponse = {
   attachmentId: number
   downloadUrl: string
+  viewUrl: string
   expiresAt: string
+}
+
+export type OrderApplication = {
+  id: number
+  orderId: number
+  designerId: number
+  designerName: string
+  designerAvatarUrl?: string
+  status: ApplicationStatus
+  createdAt?: string
+}
+
+export type OrderMessage = {
+  id: number
+  orderId: number
+  senderId: number
+  senderName: string
+  senderRole: 'DENTIST' | 'DESIGNER'
+  content: string
+  createdAt?: string
 }

@@ -9,6 +9,7 @@ import com.exomarket.domain.OrderItem;
 import com.exomarket.dto.CreateOrderRequest;
 import com.exomarket.dto.OrderResponse;
 import com.exomarket.repository.OrderAttachmentRepository;
+import com.exomarket.repository.OrderApplicationRepository;
 import com.exomarket.repository.OrderRepository;
 import com.exomarket.security.AuthenticatedUser;
 import jakarta.persistence.EntityNotFoundException;
@@ -26,10 +27,16 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderAttachmentRepository orderAttachmentRepository;
+    private final OrderApplicationRepository orderApplicationRepository;
 
-    public OrderService(OrderRepository orderRepository, OrderAttachmentRepository orderAttachmentRepository) {
+    public OrderService(
+            OrderRepository orderRepository,
+            OrderAttachmentRepository orderAttachmentRepository,
+            OrderApplicationRepository orderApplicationRepository
+    ) {
         this.orderRepository = orderRepository;
         this.orderAttachmentRepository = orderAttachmentRepository;
+        this.orderApplicationRepository = orderApplicationRepository;
     }
 
     @Transactional
@@ -52,7 +59,7 @@ public class OrderService {
             order.addItem(item);
         });
 
-        return toResponse(orderRepository.save(order));
+        return toResponse(orderRepository.save(order), currentUser);
     }
 
     @Transactional(readOnly = true)
@@ -71,23 +78,14 @@ public class OrderService {
             orders = orderRepository.findByDesignerIdAndStatus(currentUser.id(), status);
         }
 
-        return orders.stream().map(this::toResponse).toList();
+        return orders.stream().map(order -> toResponse(order, currentUser)).toList();
     }
 
     @Transactional(readOnly = true)
     public OrderResponse getById(Long id, AuthenticatedUser currentUser) {
         Order order = getOrderOrThrow(id);
         requireCanView(order, currentUser);
-        return toResponse(order);
-    }
-
-    @Transactional
-    public OrderResponse accept(Long id, AuthenticatedUser currentUser) {
-        requireRole(currentUser, UserRole.DESIGNER);
-        Order order = getOrderOrThrow(id);
-        transition(order, OrderStatus.OPEN, OrderStatus.IN_PROGRESS);
-        order.setDesignerId(currentUser.id());
-        return toResponse(orderRepository.save(order));
+        return toResponse(order, currentUser);
     }
 
     @Transactional
@@ -102,7 +100,7 @@ public class OrderService {
         if (!hasCadDeliveryStl(id)) {
             throw new IllegalStateException("Cannot submit delivery without a CAD delivery STL");
         }
-        return toResponse(orderRepository.save(order));
+        return toResponse(orderRepository.save(order), currentUser);
     }
 
     @Transactional
@@ -114,7 +112,7 @@ public class OrderService {
         if (!hasCadDeliveryStl(id)) {
             throw new IllegalStateException("Cannot approve an order without a CAD delivery STL");
         }
-        return toResponse(orderRepository.save(order));
+        return toResponse(orderRepository.save(order), currentUser);
     }
 
     @Transactional
@@ -124,7 +122,7 @@ public class OrderService {
         requireOwner(order, currentUser);
         transition(order, OrderStatus.IN_REVIEW, OrderStatus.REVISION_REQUESTED);
         order.setRevisionFeedback(feedback);
-        return toResponse(orderRepository.save(order));
+        return toResponse(orderRepository.save(order), currentUser);
     }
 
     private Order getOrderOrThrow(Long id) {
@@ -193,8 +191,13 @@ public class OrderService {
         return quadrant >= 1 && quadrant <= 4 && position >= 1 && position <= 8;
     }
 
-    private OrderResponse toResponse(Order order) {
+    private OrderResponse toResponse(Order order, AuthenticatedUser currentUser) {
         List<OrderAttachment> attachments = orderAttachmentRepository.findByOrderIdOrderByCreatedAtAsc(order.getId());
+        var applicationStatus = currentUser.role() == UserRole.DESIGNER
+                ? orderApplicationRepository.findByOrderIdAndDesignerId(order.getId(), currentUser.id())
+                        .map(application -> application.getStatus())
+                        .orElse(null)
+                : null;
 
         return new OrderResponse(
                 order.getId(),
@@ -222,7 +225,8 @@ public class OrderService {
                                 attachment.getCreatedAt()
                         ))
                         .toList(),
-                order.getRevisionFeedback()
+                order.getRevisionFeedback(),
+                applicationStatus
         );
     }
 }

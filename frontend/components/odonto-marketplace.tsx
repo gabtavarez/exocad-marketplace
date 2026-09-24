@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Activity,
   ArrowRight,
@@ -29,6 +29,8 @@ import {
   ShieldCheck,
   Sparkles,
   UploadCloud,
+  Trash2,
+  UserCog,
   UserRound,
   UsersRound,
   WalletCards,
@@ -39,19 +41,24 @@ import {
 import Clinical3DViewer from '@/components/Clinical3DViewer'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  acceptOrder,
+  acceptOrderApplication,
+  applyToOrder,
   approveOrder,
   completeAttachmentUpload,
   createOrder,
   createUploadUrl,
+  deleteAttachment,
   getAttachmentDownloadUrl,
   getOrderById,
+  getOrderApplications,
+  getOrderMessages,
   getOrders,
   requestOrderRevision,
+  sendOrderMessage,
   submitOrderDelivery,
   uploadFileToStorage,
 } from '@/services/orderService'
-import type { AttachmentStage, CreateOrderRequest, OrderAttachment, OrderResponse, OrderStatus } from '@/types/order'
+import type { AttachmentStage, CreateOrderRequest, OrderApplication, OrderAttachment, OrderMessage, OrderResponse, OrderStatus } from '@/types/order'
 
 type RoleLabel = 'Dentista' | 'Cadista'
 type CaseFile = {
@@ -118,18 +125,68 @@ function StatusBadge({ status }: { status: OrderStatus }) {
   return <span className={`status-badge ${statusTone(status)}`}><span className="status-dot" />{mapStatus(status)}</span>
 }
 
-function Header({ role, userName, onLogout }: { role: RoleLabel; userName: string; onLogout: () => void }) {
-  const initials = userName.split(' ').slice(0, 2).map((part) => part[0]).join('').toUpperCase()
-  return <header className="topbar"><div className="topbar-left"><button className="mobile-menu" aria-label="Abrir menu"><PanelLeft /></button><Brand /></div><div className="topbar-actions"><div className="role-switcher" aria-label="Perfil autenticado"><button className="active" type="button">{role === 'Dentista' ? <UserRound /> : <UsersRound />}{role}</button></div><button className="notification-button" aria-label="Notificações"><Bell /><span /></button><div className="profile-avatar">{initials || 'U'}</div><button className="icon-button" aria-label="Terminar sessão" title="Terminar sessão" onClick={onLogout}><LogOut /></button></div></header>
+function UserAvatar({ name, avatarUrl, className }: { name: string; avatarUrl?: string; className: string }) {
+  const initials = name.split(' ').slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'U'
+  return <span className={className}>{avatarUrl ? <img src={avatarUrl} alt="" /> : initials}</span>
 }
 
-function Sidebar({ active, setActive, role, orderCount, userName }: { active: string; setActive: (label: string) => void; role: RoleLabel; orderCount: number; userName: string }) {
-  const initials = userName.split(' ').slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'U'
+function Header({ role, userName, avatarUrl, onProfile, onLogout }: { role: RoleLabel; userName: string; avatarUrl?: string; onProfile: () => void; onLogout: () => void }) {
+  return <header className="topbar"><div className="topbar-left"><button className="mobile-menu" aria-label="Abrir menu"><PanelLeft /></button><Brand /></div><div className="topbar-actions"><div className="role-switcher" aria-label="Perfil autenticado"><button className="active" type="button">{role === 'Dentista' ? <UserRound /> : <UsersRound />}{role}</button></div><button className="notification-button" aria-label="Notificações"><Bell /><span /></button><button className="profile-trigger" onClick={onProfile} title="Editar perfil"><UserAvatar name={userName} avatarUrl={avatarUrl} className="profile-avatar" /><strong>{userName}</strong></button><button className="icon-button logout-button" aria-label="Sair" title="Sair e trocar de conta" onClick={onLogout}><LogOut /></button></div></header>
+}
+
+function Sidebar({ active, setActive, role, orderCount, userName, avatarUrl, onLogout, onProfile, onComingSoon }: { active: string; setActive: (label: string) => void; role: RoleLabel; orderCount: number; userName: string; avatarUrl?: string; onLogout: () => void; onProfile: () => void; onComingSoon: (feature: string) => void }) {
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const navItems = role === 'Dentista'
     ? [{ label: 'Visão geral', icon: LayoutDashboard }, { label: 'Meus Casos', icon: FileCheck2 }, { label: 'Novo Caso', icon: Plus }]
     : [{ label: 'Visão geral', icon: LayoutDashboard }, { label: 'Meus Casos', icon: FileCheck2 }]
 
-  return <aside className="sidebar"><div className="sidebar-profile"><div className="large-avatar">{initials}</div><div><strong>{userName}</strong><span>{role} · dentform</span></div><MoreHorizontal className="muted-icon" /></div><nav className="main-nav">{navItems.map(({ label, icon: Icon }) => <button key={label} className={active === label ? 'nav-item active' : 'nav-item'} onClick={() => setActive(label)}><Icon />{label}{label === 'Meus Casos' && <span className="nav-count">{orderCount}</span>}</button>)}</nav><div className="sidebar-label">GESTÃO</div><nav className="main-nav"><button className="nav-item"><WalletCards />Financeiro</button><button className="nav-item"><MessageCircle />Mensagens</button><button className="nav-item"><Settings2 />Configurações</button></nav><div className="sidebar-bottom"><div className="secure-card"><ShieldCheck /><div><strong>Ambiente seguro</strong><span>Arquivos 3D por URLs assinadas</span></div></div></div></aside>
+  return <aside className="sidebar"><nav className="main-nav sidebar-primary">{navItems.map(({ label, icon: Icon }) => <button key={label} className={active === label ? 'nav-item active' : 'nav-item'} onClick={() => setActive(label)}><Icon />{label}{label === 'Meus Casos' && <span className="nav-count">{orderCount}</span>}</button>)}</nav><div className="sidebar-label">GESTÃO</div><nav className="main-nav"><button className="nav-item" onClick={() => onComingSoon('Financeiro')}><WalletCards />Financeiro<span className="soon-badge">Em breve</span></button><button className="nav-item" onClick={() => onComingSoon('Mensagens')}><MessageCircle />Mensagens<span className="soon-badge">Em breve</span></button><button className={active === 'Configurações' ? 'nav-item active' : 'nav-item'} onClick={() => setActive('Configurações')}><Settings2 />Configurações</button></nav><div className="sidebar-bottom"><div className="secure-card"><ShieldCheck /><div><strong>Ambiente seguro</strong><span>Arquivos 3D por URLs assinadas</span></div></div><div className="sidebar-profile sidebar-user"><UserAvatar name={userName} avatarUrl={avatarUrl} className="large-avatar" /><button className="sidebar-user-name" onClick={onProfile}><strong>{userName}</strong><span>{role} · dentform</span></button><button className="more-button" aria-label="Abrir menu do usuário" onClick={() => setUserMenuOpen((open) => !open)}><MoreHorizontal /></button>{userMenuOpen && <div className="user-menu"><button onClick={onProfile}><UserCog />Editar perfil</button><button onClick={onLogout}><LogOut />Sair</button></div>}</div></div></aside>
+}
+
+function SimpleModal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="app-modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><div className="modal-heading"><h2>{title}</h2><button onClick={onClose} aria-label="Fechar"><X /></button></div>{children}</section></div>
+}
+
+function ProfileModal({ onClose }: { onClose: () => void }) {
+  return <SimpleModal title="Editar perfil" onClose={onClose}><ProfileEditor onSaved={onClose} onCancel={onClose} /></SimpleModal>
+}
+
+function ProfileEditor({ onSaved, onCancel }: { onSaved?: () => void; onCancel?: () => void }) {
+  const { user, updateProfile } = useAuth()
+  const [name, setName] = useState(user?.name ?? '')
+  const [avatarFile, setAvatarFile] = useState<File | undefined>()
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const previewUrl = useMemo(() => avatarFile ? URL.createObjectURL(avatarFile) : user?.avatarUrl, [avatarFile, user?.avatarUrl])
+
+  useEffect(() => () => {
+    if (avatarFile && previewUrl) URL.revokeObjectURL(previewUrl)
+  }, [avatarFile, previewUrl])
+
+  const selectAvatar = (file?: File) => {
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Selecione uma imagem JPG, PNG ou WebP.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('A foto deve ter no máximo 5 MB.')
+      return
+    }
+    setAvatarFile(file)
+    setError(null)
+  }
+
+  const save = async () => {
+    setSaving(true)
+    setError(null)
+    try { await updateProfile(name, avatarFile); onSaved?.() } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível atualizar o perfil.') } finally { setSaving(false) }
+  }
+  return <div className="profile-editor"><div className="profile-preview avatar-picker"><UserAvatar name={name || 'Utilizador'} avatarUrl={previewUrl} className="settings-avatar" /><div><strong>Foto do perfil</strong><span>JPG, PNG ou WebP, até 5 MB</span><label className="secondary-button avatar-select"><FileUp />Escolher foto<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { selectAvatar(event.target.files?.[0]); event.target.value = '' }} /></label>{avatarFile && <small>{avatarFile.name}</small>}</div></div><label className="field"><span>Nome</span><input value={name} onChange={(event) => setName(event.target.value)} /></label>{error && <p className="auth-error">{error}</p>}<div className="modal-actions">{onCancel && <button className="secondary-button" onClick={onCancel}>Cancelar</button>}<button className="primary-button" onClick={save} disabled={saving || name.trim().length === 0}>{saving ? 'A guardar...' : 'Guardar perfil'}</button></div></div>
+}
+
+function SettingsPage({ onLogout }: { onLogout: () => void }) {
+  return <div className="page-content settings-page"><div className="page-heading"><div><div className="eyebrow">CONTA</div><h1>Configurações</h1><p>Atualize o perfil e gerencie o acesso à sua conta.</p></div></div><div className="settings-grid"><section className="panel settings-panel"><div className="panel-header"><div><h2>Perfil</h2><p>Nome e foto exibidos no marketplace</p></div></div><div className="settings-content"><ProfileEditor /></div></section><section className="panel settings-panel account-panel"><div className="panel-header"><div><h2>Sessão</h2><p>Encerre a sessão para entrar com outra conta</p></div></div><div className="settings-content"><button className="logout-action" onClick={onLogout}><LogOut /><div><strong>Sair da conta</strong><span>Voltar à tela de login para alternar entre Dentista e Cadista</span></div></button></div></section></div></div>
 }
 
 function StatCard({ icon: Icon, label, value, trend, tone }: { icon: typeof Activity; label: string; value: string; trend: string; tone: string }) {
@@ -198,19 +255,30 @@ function CaseTimeline({ status }: { status: OrderStatus }) {
   return <div className="case-timeline">{steps.map((step, index) => <div className={index <= activeIndex ? 'timeline-step active' : 'timeline-step'} key={step.status}><span>{index + 1}</span><strong>{step.label}</strong></div>)}{status === 'REVISION_REQUESTED' && <div className="timeline-step revision active"><span>!</span><strong>Ajuste Solicitado</strong></div>}</div>
 }
 
-function ReviewWorkspace({ order, role, onBack, onRefresh }: { order: OrderResponse; role: RoleLabel; onBack: () => void; onRefresh: (id: number) => Promise<OrderResponse> }) {
+function ReviewWorkspace({ order, role, currentUserId, onBack, onRefresh }: { order: OrderResponse; role: RoleLabel; currentUserId?: number; onBack: () => void; onRefresh: (id: number) => Promise<OrderResponse> }) {
   const clinicalAttachments = order.attachments.filter((attachment) => attachment.stage === 'CLINICAL_INPUT')
   const cadAttachments = order.attachments.filter((attachment) => attachment.stage === 'CAD_DELIVERY')
   const [viewerAttachments, setViewerAttachments] = useState<OrderAttachment[]>([])
   const [deliveryFiles, setDeliveryFiles] = useState<CaseFile[]>([])
   const [revisionFeedback, setRevisionFeedback] = useState(order.revisionFeedback ?? '')
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [applications, setApplications] = useState<OrderApplication[]>([])
   const hasDeliveryStl = cadAttachments.some((file) => file.fileName.toLowerCase().endsWith('.stl') && file.uploaded)
+
+  useEffect(() => {
+    if (role !== 'Dentista' || order.status !== 'OPEN') {
+      setApplications([])
+      return
+    }
+    getOrderApplications(order.id)
+      .then(setApplications)
+      .catch(() => setStatusMessage('Não foi possível carregar os cadistas interessados.'))
+  }, [order.id, order.status, role])
 
   const withDownloadUrl = async (attachment: OrderAttachment) => {
     if (attachment.downloadUrl) return attachment
     const response = await getAttachmentDownloadUrl(order.id, attachment.id)
-    const next = { ...attachment, downloadUrl: response.downloadUrl, viewerUrl: attachment.fileName.toLowerCase().endsWith('.html') ? response.downloadUrl : attachment.viewerUrl }
+    const next = { ...attachment, downloadUrl: response.downloadUrl, viewerUrl: response.viewUrl }
     return next
   }
 
@@ -258,6 +326,25 @@ function ReviewWorkspace({ order, role, onBack, onRefresh }: { order: OrderRespo
     }
   }
 
+  const removeDelivery = async (attachment: OrderAttachment) => {
+    setStatusMessage(null)
+    try {
+      await deleteAttachment(order.id, attachment.id)
+      await onRefresh(order.id)
+      setViewerAttachments((current) => current.filter((item) => item.id !== attachment.id))
+      setStatusMessage('Arquivo removido. Pode enviar a versão substituta.')
+    } catch (cause) {
+      setStatusMessage(cause instanceof Error ? cause.message : 'Não foi possível remover o arquivo.')
+    }
+  }
+
+  const acceptApplication = async (applicationId: number) => {
+    await runTransition(
+      () => acceptOrderApplication(order.id, applicationId),
+      'Cadista atribuído. O chat do caso já está disponível.',
+    )
+  }
+
   const runTransition = async (action: () => Promise<OrderResponse>, successMessage: string) => {
     try {
       setStatusMessage(null)
@@ -269,17 +356,86 @@ function ReviewWorkspace({ order, role, onBack, onRefresh }: { order: OrderRespo
     }
   }
 
-  return <div className="page-content workspace-page"><div className="breadcrumb"><button onClick={onBack}>Meus Casos</button><ArrowRight /><span>Caso {String(order.id).padStart(5, '0')} · Detalhes do Caso</span></div><div className="workspace-heading"><div><div className="eyebrow">CASO {String(order.id).padStart(5, '0')} · {mapStatus(order.status).toUpperCase()}</div><h1>Detalhes do Caso · {orderWork(order)}</h1><p>Paciente: {order.title}{order.designerId && <><span className="heading-separator">·</span> Cadista atribuído</>}</p></div><StatusBadge status={order.status} /></div><CaseTimeline status={order.status} /><div className="workspace-grid"><section className="viewer-panel panel"><Clinical3DViewer attachments={viewerAttachments} /></section><aside className="review-sidebar panel"><div className="review-header"><div><h2>Arquivos do caso</h2><p>Entrada clínica e entrega CAD</p></div><span className="online"><Wifi /> Online</span></div><div className="attachment-tabs"><section><div className="section-heading compact"><div className="section-number">01</div><div><h2>Arquivos Clínicos do Caso</h2><p>Enviados pelo dentista</p></div></div><AttachmentList attachments={clinicalAttachments} empty="Nenhum arquivo clínico anexado." onInspect={(attachment) => inspectAttachment([attachment])} onDownload={downloadAttachment} /></section><section><div className="section-heading compact"><div className="section-number">02</div><div><h2>Entrega do Design</h2><p>Arquivos finais enviados pelo cadista</p></div></div><AttachmentList attachments={cadAttachments} empty="Nenhuma entrega CAD recebida." onInspect={(attachment) => inspectAttachment(attachment.fileName.toLowerCase().endsWith('.html') ? [attachment] : [attachment, ...clinicalAttachments.filter((item) => item.fileName.toLowerCase().endsWith('.stl'))])} onDownload={downloadAttachment} />{role === 'Cadista' && (order.status === 'IN_PROGRESS' || order.status === 'REVISION_REQUESTED') && <div className="delivery-upload"><CaseFileUpload files={deliveryFiles} onFilesChange={setDeliveryFiles} stage="CAD_DELIVERY" acceptedExtensions={cadDeliveryExtensions} helperText=".stl, .constructioninfo ou .html · sem pastas brutas ou zips" /><button className="primary-button full" onClick={uploadDelivery} disabled={deliveryFiles.length === 0}>Enviar entrega CAD</button></div>}{role === 'Dentista' && <label className="field revision-field"><span>Observações para ajuste</span><textarea value={revisionFeedback} onChange={(event) => setRevisionFeedback(event.target.value)} placeholder="Descreva o ajuste clínico necessário..." /></label>}</section></div>{statusMessage && <p className="escrow-note status-message">{statusMessage}</p>}<div className="review-actions">{role === 'Cadista' && <><button className="request-button" onClick={() => runTransition(() => acceptOrder(order.id), 'Caso assumido pelo cadista.')} disabled={order.status !== 'OPEN'}><CheckCircle2 />Assumir Caso</button><button className="approve-button" onClick={() => runTransition(() => submitOrderDelivery(order.id), 'Caso enviado para aprovação.')} disabled={(order.status !== 'IN_PROGRESS' && order.status !== 'REVISION_REQUESTED') || !hasDeliveryStl}><UploadCloud />Enviar para Aprovação</button></>}{role === 'Dentista' && <><button className="approve-button" onClick={() => runTransition(() => approveOrder(order.id), 'Design aprovado.')} disabled={order.status !== 'IN_REVIEW' || !hasDeliveryStl}><CheckCircle2 />Aprovar Design</button><button className="request-button" onClick={() => runTransition(() => requestOrderRevision(order.id, revisionFeedback), 'Ajuste solicitado ao cadista.')} disabled={order.status !== 'IN_REVIEW' || revisionFeedback.trim().length === 0}><MessageCircle />Pedir Ajuste</button></>}</div></aside></div></div>
+  return <div className="page-content workspace-page">
+    <div className="breadcrumb"><button onClick={onBack}>Meus Casos</button><ArrowRight /><span>Caso {String(order.id).padStart(5, '0')} · Detalhes do Caso</span></div>
+    <div className="workspace-heading"><div><div className="eyebrow">CASO {String(order.id).padStart(5, '0')} · {mapStatus(order.status).toUpperCase()}</div><h1>Detalhes do Caso · {orderWork(order)}</h1><p>Paciente: {order.title}{order.designerId && <><span className="heading-separator">·</span> Cadista atribuído</>}</p></div><StatusBadge status={order.status} /></div>
+    <CaseTimeline status={order.status} />
+    <div className="workspace-grid">
+      <section className="viewer-panel panel"><Clinical3DViewer attachments={viewerAttachments} /></section>
+      <aside className="review-sidebar panel">
+        <div className="review-header"><div><h2>Arquivos do caso</h2><p>Entrada clínica, entrega CAD e mensagens</p></div><span className="online"><Wifi /> Online</span></div>
+        <div className="attachment-tabs">
+          <section><div className="section-heading compact"><div className="section-number">01</div><div><h2>Arquivos Clínicos do Caso</h2><p>Enviados pelo dentista</p></div></div><AttachmentList attachments={clinicalAttachments} empty="Nenhum arquivo clínico anexado." onInspect={(attachment) => inspectAttachment([attachment])} onDownload={downloadAttachment} /></section>
+          <section><div className="section-heading compact"><div className="section-number">02</div><div><h2>Entrega do Design</h2><p>Arquivos finais enviados pelo cadista</p></div></div><AttachmentList attachments={cadAttachments} empty="Nenhuma entrega CAD recebida." onInspect={(attachment) => inspectAttachment(attachment.fileName.toLowerCase().endsWith('.html') ? [attachment] : [attachment, ...clinicalAttachments.filter((item) => item.fileName.toLowerCase().endsWith('.stl') || item.fileName.toLowerCase().endsWith('.ply'))])} onDownload={downloadAttachment} onDelete={role === 'Cadista' && (order.status === 'IN_PROGRESS' || order.status === 'REVISION_REQUESTED') ? removeDelivery : undefined} />{role === 'Cadista' && (order.status === 'IN_PROGRESS' || order.status === 'REVISION_REQUESTED') && <div className="delivery-upload"><CaseFileUpload files={deliveryFiles} onFilesChange={setDeliveryFiles} stage="CAD_DELIVERY" acceptedExtensions={cadDeliveryExtensions} helperText=".stl, .constructioninfo ou .html · sem pastas brutas ou zips" /><button className="primary-button full" onClick={uploadDelivery} disabled={deliveryFiles.length === 0}>Enviar entrega CAD</button></div>}{role === 'Dentista' && <label className="field revision-field"><span>Observações para ajuste</span><textarea value={revisionFeedback} onChange={(event) => setRevisionFeedback(event.target.value)} placeholder="Descreva o ajuste clínico necessário..." /></label>}</section>
+          {role === 'Dentista' && order.status === 'OPEN' && <section className="applications-section"><div className="section-heading compact"><div className="section-number">03</div><div><h2>Cadistas Interessados</h2><p>Escolha quem ficará responsável pelo projeto</p></div></div>{applications.length === 0 ? <div className="chat-empty">Nenhuma candidatura recebida ainda.</div> : applications.map((application) => <div className="application-row" key={application.id}><UserAvatar name={application.designerName} avatarUrl={application.designerAvatarUrl} className="large-avatar" /><div><strong>{application.designerName}</strong><span>Candidatura recebida em {formatDate(application.createdAt)}</span></div><button className="request-button" onClick={() => void acceptApplication(application.id)} disabled={application.status !== 'PENDING'}><CheckCircle2 />Aceitar Cadista</button></div>)}</section>}
+          {order.designerId ? <CaseChat orderId={order.id} currentUserId={currentUserId} /> : <div className="chat-locked"><LockKeyhole /><span>O chat será liberado após a atribuição de um cadista.</span></div>}
+        </div>
+        {statusMessage && <p className="escrow-note status-message">{statusMessage}</p>}
+        <div className="review-actions">
+          {role === 'Cadista' && <><button className="request-button" onClick={() => runTransition(async () => { await applyToOrder(order.id); return onRefresh(order.id) }, 'Candidatura enviada ao dentista.')} disabled={order.status !== 'OPEN' || order.applicationStatus === 'PENDING'}><CheckCircle2 />{order.applicationStatus === 'PENDING' ? 'Candidatura Pendente' : 'Candidatar-se ao Caso'}</button><button className="approve-button" onClick={() => runTransition(() => submitOrderDelivery(order.id), 'Caso enviado para aprovação.')} disabled={(order.status !== 'IN_PROGRESS' && order.status !== 'REVISION_REQUESTED') || !hasDeliveryStl}><UploadCloud />Enviar para Aprovação</button></>}
+          {role === 'Dentista' && <><button className="approve-button" onClick={() => runTransition(() => approveOrder(order.id), 'Design aprovado.')} disabled={order.status !== 'IN_REVIEW' || !hasDeliveryStl}><CheckCircle2 />Aprovar Design</button><button className="request-button" onClick={() => runTransition(() => requestOrderRevision(order.id, revisionFeedback), 'Ajuste solicitado ao cadista.')} disabled={order.status !== 'IN_REVIEW' || revisionFeedback.trim().length === 0}><MessageCircle />Pedir Ajuste</button></>}
+        </div>
+      </aside>
+    </div>
+  </div>
 }
 
-function AttachmentList({ attachments, empty, onInspect, onDownload }: { attachments: OrderAttachment[]; empty: string; onInspect: (attachment: OrderAttachment) => void; onDownload: (attachment: OrderAttachment) => void }) {
-  return <div className="file-checklist">{attachments.length === 0 ? <div className="file-row"><div className="file-status"><FileArchive /></div><div><strong>{empty}</strong><span>Aguardando upload</span></div></div> : attachments.map((attachment) => <div className="file-row" key={attachment.id}><div className={attachment.uploaded ? 'file-status checked' : 'file-status'}>{attachment.stage === 'CAD_DELIVERY' ? <FileCheck2 /> : <FileArchive />}</div><div><strong>{attachment.fileName}</strong><span>{formatFileSize(attachment.size)} · {attachment.uploaded ? 'confirmado' : 'pendente'}</span></div>{(attachment.fileName.toLowerCase().endsWith('.stl') || attachment.fileName.toLowerCase().endsWith('.html')) && <button className="attach-button" onClick={() => onInspect(attachment)}>{attachment.fileName.toLowerCase().endsWith('.html') ? 'Webview 3D' : <><ZoomIn />Inspecionar 3D</>}</button>}<button className="remove-file" aria-label="Baixar arquivo" onClick={() => onDownload(attachment)}><Download /></button></div>)}</div>
+function AttachmentList({ attachments, empty, onInspect, onDownload, onDelete }: { attachments: OrderAttachment[]; empty: string; onInspect: (attachment: OrderAttachment) => void; onDownload: (attachment: OrderAttachment) => void; onDelete?: (attachment: OrderAttachment) => void }) {
+  return <div className="file-checklist">{attachments.length === 0 ? <div className="file-row"><div className="file-status"><FileArchive /></div><div><strong>{empty}</strong><span>Aguardando upload</span></div></div> : attachments.map((attachment) => <div className="file-row" key={attachment.id}><div className={attachment.uploaded ? 'file-status checked' : 'file-status'}>{attachment.stage === 'CAD_DELIVERY' ? <FileCheck2 /> : <FileArchive />}</div><div><strong>{attachment.fileName}</strong><span>{formatFileSize(attachment.size)} · {attachment.uploaded ? 'confirmado' : 'pendente'}</span></div>{(['.stl', '.ply', '.html'].some((extension) => attachment.fileName.toLowerCase().endsWith(extension))) && <button className="attach-button" onClick={() => onInspect(attachment)}>{attachment.fileName.toLowerCase().endsWith('.html') ? 'Webview 3D' : <><ZoomIn />Inspecionar 3D</>}</button>}<button className="remove-file" aria-label="Baixar arquivo" title="Baixar arquivo" onClick={() => onDownload(attachment)}><Download /></button>{onDelete && <button className="remove-file danger" aria-label="Remover arquivo" title="Remover para substituir" onClick={() => onDelete(attachment)}><Trash2 /></button>}</div>)}</div>
 }
 
-function DesignerBoard({ orders, onOpenCase }: { orders: OrderResponse[]; onOpenCase: (order: OrderResponse) => void }) {
+function CaseChat({ orderId, currentUserId }: { orderId: number; currentUserId?: number }) {
+  const [messages, setMessages] = useState<OrderMessage[]>([])
+  const [content, setContent] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadMessages = async () => {
+    try {
+      setMessages(await getOrderMessages(orderId))
+      setError(null)
+    } catch {
+      setError('Não foi possível carregar o chat.')
+    }
+  }
+
+  useEffect(() => {
+    void loadMessages()
+    const interval = window.setInterval(() => void loadMessages(), 7000)
+    return () => window.clearInterval(interval)
+  }, [orderId])
+
+  const submit = async () => {
+    const trimmed = content.trim()
+    if (!trimmed) return
+
+    setSending(true)
+    setError(null)
+    try {
+      const created = await sendOrderMessage(orderId, trimmed)
+      setMessages((current) => [...current, created])
+      setContent('')
+    } catch {
+      setError('Não foi possível enviar a mensagem.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return <section className="case-chat"><div className="section-heading compact"><div className="section-number">03</div><div><h2>Mensagens / Chat do Caso</h2><p>Histórico interno entre dentista e cadista</p></div></div><div className="chat-thread">{messages.length === 0 ? <div className="chat-empty">Nenhuma mensagem ainda.</div> : messages.map((message) => { const mine = message.senderId === currentUserId; return <div className={mine ? 'chat-bubble mine' : 'chat-bubble'} key={message.id}><div className="chat-meta"><strong>{mine ? 'Você' : message.senderName}</strong><span>{message.senderRole === 'DESIGNER' ? 'Cadista' : 'Dentista'} · {formatDate(message.createdAt)}</span></div><p>{message.content}</p></div> })}</div>{error && <p className="escrow-note">{error}</p>}<div className="case-chat-composer"><input value={content} onChange={(event) => setContent(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit() } }} placeholder="Escreva uma mensagem..." /><button onClick={submit} disabled={sending || content.trim().length === 0}>Enviar</button></div></section>
+}
+
+function DesignerBoard({ orders, onOpenCase, onApply }: { orders: OrderResponse[]; onOpenCase: (order: OrderResponse) => void; onApply: (order: OrderResponse) => Promise<void> }) {
+  const [filter, setFilter] = useState<'open' | 'assigned'>('open')
+  const [applyingId, setApplyingId] = useState<number | null>(null)
   const openOrders = orders.filter((order) => order.status === 'OPEN')
   const assignedOrders = orders.filter((order) => order.status !== 'OPEN')
-  return <div className="page-content"><div className="page-heading"><div><div className="eyebrow">CENTRAL DE OPORTUNIDADES</div><h1>Mural do Cadista</h1><p>Assuma casos abertos e acompanhe suas entregas.</p></div><div className="designer-balance"><CircleDollarSign /><div><span>Potencial aberto</span><strong>{formatCurrency(openOrders.reduce((sum, order) => sum + order.totalAmount, 0))}</strong></div></div></div><div className="designer-grid"><section className="panel open-cases"><div className="panel-header"><div><h2>Casos abertos</h2><p>Novos trabalhos na rede dentform</p></div><span className="live-pill"><span/> Atualizado agora</span></div><div className="case-filters"><button className="active">Todos <span>{openOrders.length}</span></button><button>Atribuídos <span>{assignedOrders.length}</span></button></div>{openOrders.length === 0 ? <div className="empty-state">Nenhum caso aberto no momento.</div> : openOrders.map((order) => <div className="open-case" key={order.id}><div className="case-type blue"><Box /></div><div className="case-info"><div><strong>{order.items[0]?.serviceType ?? 'Caso odontológico'}</strong><span>Caso {String(order.id).padStart(5, '0')} <i>·</i> {formatDate(order.createdAt)}</span></div><p>{order.title} · {orderWork(order)}</p><div className="case-tags"><span>Exocad</span><span>{order.attachments.length} arquivos</span></div></div><div className="case-price"><strong>{formatCurrency(order.totalAmount)}</strong><span>valor estimado</span><button onClick={() => onOpenCase(order)}>Ver caso <ArrowRight /></button></div></div>)}</section><aside className="panel designer-profile"><div className="profile-cover"/><div className="designer-avatar">CD<span><Check /></span></div><h2>Área do Cadista</h2><p>Produção CAD/CAM</p><div className="rating"><span>★</span> Marketplace <small>· {assignedOrders.length} casos atribuídos</small></div><div className="profile-stats"><div><strong>{assignedOrders.filter((order) => order.status === 'IN_REVIEW').length}</strong><span>Em revisão</span></div><div><strong>{assignedOrders.filter((order) => order.status === 'COMPLETED').length}</strong><span>Concluídos</span></div></div><div className="profile-skills"><span>Prótese fixa</span><span>Implante</span><span>Exocad</span></div></aside></div><section className="panel delivery-panel"><div className="panel-header"><div><h2>Meus Casos</h2><p>Casos assumidos e entregas em andamento</p></div></div><OrderList orders={assignedOrders} onOpenCase={onOpenCase} /></section></div>
+  const displayedOrders = filter === 'open' ? openOrders : assignedOrders
+  const apply = async (order: OrderResponse) => {
+    setApplyingId(order.id)
+    try { await onApply(order) } finally { setApplyingId(null) }
+  }
+  return <div className="page-content"><div className="page-heading"><div><div className="eyebrow">CENTRAL DE OPORTUNIDADES</div><h1>Mural do Cadista</h1><p>Candidate-se a casos abertos e acompanhe os projetos atribuídos.</p></div><div className="designer-balance"><CircleDollarSign /><div><span>Potencial aberto</span><strong>{formatCurrency(openOrders.reduce((sum, order) => sum + order.totalAmount, 0))}</strong></div></div></div><div className="designer-grid"><section className="panel open-cases"><div className="panel-header"><div><h2>{filter === 'open' ? 'Casos abertos' : 'Meus casos atribuídos'}</h2><p>{filter === 'open' ? 'Novos trabalhos na rede dentform' : 'Produção e entregas em andamento'}</p></div><span className="live-pill"><span/> Atualizado agora</span></div><div className="case-filters"><button className={filter === 'open' ? 'active' : ''} onClick={() => setFilter('open')}>Todos os Casos Abertos <span>{openOrders.length}</span></button><button className={filter === 'assigned' ? 'active' : ''} onClick={() => setFilter('assigned')}>Meus Casos Atribuídos <span>{assignedOrders.length}</span></button></div>{displayedOrders.length === 0 ? <div className="empty-state">Nenhum caso nesta lista.</div> : displayedOrders.map((order) => <div className="open-case" key={order.id}><div className="case-type blue"><Box /></div><div className="case-info"><div><strong>{order.items[0]?.serviceType ?? 'Caso odontológico'}</strong><span>Caso {String(order.id).padStart(5, '0')} <i>·</i> {formatDate(order.createdAt)}</span></div><p>{order.title} · {orderWork(order)}</p><div className="case-tags"><span>Exocad</span><span>{order.attachments.length} arquivos</span>{order.applicationStatus === 'PENDING' && <span className="pending-tag">Candidatura pendente</span>}</div></div><div className="case-price"><strong>{formatCurrency(order.totalAmount)}</strong><span>valor estimado</span>{filter === 'open' && <button className="apply-case-button" onClick={() => void apply(order)} disabled={applyingId === order.id || order.applicationStatus === 'PENDING'}>{order.applicationStatus === 'PENDING' ? 'Candidatura enviada' : applyingId === order.id ? 'Enviando...' : 'Candidatar-se ao Caso'}</button>}<button onClick={() => onOpenCase(order)}>Ver detalhes <ArrowRight /></button></div></div>)}</section><aside className="panel designer-profile"><div className="profile-cover"/><div className="designer-avatar">CD<span><Check /></span></div><h2>Área do Cadista</h2><p>Produção CAD/CAM</p><div className="rating"><span>★</span> Marketplace <small>· {assignedOrders.length} casos atribuídos</small></div><div className="profile-stats"><div><strong>{assignedOrders.filter((order) => order.status === 'IN_REVIEW').length}</strong><span>Em revisão</span></div><div><strong>{assignedOrders.filter((order) => order.status === 'COMPLETED').length}</strong><span>Concluídos</span></div></div><div className="profile-skills"><span>Prótese fixa</span><span>Implante</span><span>Exocad</span></div></aside></div></div>
 }
 
 export default function OdontoMarketplace() {
@@ -289,6 +445,8 @@ export default function OdontoMarketplace() {
   const [orders, setOrders] = useState<OrderResponse[]>([])
   const [usingFallback, setUsingFallback] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<OrderResponse | null>(null)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [comingSoon, setComingSoon] = useState<string | null>(null)
 
   const loadOrders = async () => {
     try {
@@ -352,13 +510,20 @@ export default function OdontoMarketplace() {
     setActive('Meus Casos')
   }
 
-  const screen = active === 'Novo Caso'
+  const handleApply = async (order: OrderResponse) => {
+    await applyToOrder(order.id)
+    await loadOrders()
+  }
+
+  const screen = active === 'Configurações'
+    ? <SettingsPage onLogout={signOut} />
+    : active === 'Novo Caso'
     ? <NewCase onBack={() => setActive('Visão geral')} onSubmit={handleCreateOrder} />
     : active === 'Meus Casos' && selectedOrder
-      ? <ReviewWorkspace order={selectedOrder} role={role} onBack={() => { setSelectedOrder(null); setActive('Visão geral') }} onRefresh={refreshOrder} />
+      ? <ReviewWorkspace order={selectedOrder} role={role} currentUserId={user?.id} onBack={() => { setSelectedOrder(null); setActive('Visão geral') }} onRefresh={refreshOrder} />
       : role === 'Cadista'
-        ? <DesignerBoard orders={orders} onOpenCase={openCase} />
+        ? <DesignerBoard orders={orders} onOpenCase={openCase} onApply={handleApply} />
         : <Dashboard orders={orders} usingFallback={usingFallback} onNewCase={() => setActive('Novo Caso')} onOpenCase={openCase} />
 
-  return <div className="app-shell"><Header role={role} userName={user?.name ?? 'Utilizador'} onLogout={signOut}/><div className="app-body"><Sidebar active={active} setActive={setActive} role={role} orderCount={orders.length} userName={user?.name ?? 'Utilizador'}/><main className="main-area">{screen}</main></div></div>
+  return <div className="app-shell"><Header role={role} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onProfile={() => setProfileOpen(true)} onLogout={signOut} /><div className="app-body"><Sidebar active={active} setActive={setActive} role={role} orderCount={orders.length} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onLogout={signOut} onProfile={() => setProfileOpen(true)} onComingSoon={setComingSoon} /><main className="main-area">{screen}</main></div>{profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}{comingSoon && <SimpleModal title={comingSoon} onClose={() => setComingSoon(null)}><div className="coming-soon"><Sparkles /><strong>Em breve</strong><p>Estamos preparando esta área para uma próxima versão.</p><button className="primary-button" onClick={() => setComingSoon(null)}>Entendi</button></div></SimpleModal>}</div>
 }

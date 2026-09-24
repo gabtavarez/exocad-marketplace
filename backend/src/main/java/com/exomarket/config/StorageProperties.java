@@ -8,6 +8,7 @@ public record StorageProperties(
         String publicEndpoint,
         String region,
         String bucket,
+        String avatarBucket,
         String accessKey,
         String secretKey,
         int presignedUrlExpirationMinutes

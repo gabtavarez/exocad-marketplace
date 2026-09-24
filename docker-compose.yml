@@ -12,12 +12,13 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: exomarket-minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_API_CORS_ALLOW_ORIGIN: "http://localhost:3000,http://localhost:5173"
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -25,17 +26,18 @@ services:
       - miniodata:/data
 
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: exomarket-minio-init
     depends_on:
       - minio
     entrypoint: >
       /bin/sh -c "
+      set -e;
       until mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 2; done;
       mc mb --ignore-existing local/exocad-cases;
-      printf '[{\"AllowedOrigins\":[\"http://localhost:3000\",\"http://localhost:5173\"],\"AllowedMethods\":[\"GET\",\"PUT\",\"POST\",\"DELETE\",\"HEAD\"],\"AllowedHeaders\":[\"*\"],\"ExposeHeaders\":[\"ETag\"],\"MaxAgeSeconds\":3000}]' > /tmp/cors.json;
-      mc cors set local/exocad-cases /tmp/cors.json;
       mc anonymous set none local/exocad-cases;
+      mc mb --ignore-existing local/profile-avatars;
+      mc anonymous set download local/profile-avatars;
       "
 
 volumes:

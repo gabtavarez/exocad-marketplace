@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
+import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
 import type { OrderAttachment } from '@/types/order'
 
 type ViewerMode = 'shaded' | 'wireframe'
@@ -17,8 +18,9 @@ type MeshState = {
 
 const palette = ['#d9e6f2', '#f5c7a9', '#b8e0d2', '#d7c4f2', '#f2d98d']
 
-function isStlAttachment(attachment: OrderAttachment) {
-  return attachment.fileName.toLowerCase().endsWith('.stl') && Boolean(attachment.downloadUrl)
+function isMeshAttachment(attachment: OrderAttachment) {
+  const fileName = attachment.fileName.toLowerCase()
+  return (fileName.endsWith('.stl') || fileName.endsWith('.ply')) && Boolean(attachment.viewerUrl || attachment.downloadUrl)
 }
 
 function isHtmlAttachment(attachment: OrderAttachment) {
@@ -31,17 +33,29 @@ export default function Clinical3DViewer({ attachments }: { attachments: OrderAt
   const [mode, setMode] = useState<ViewerMode>('shaded')
   const [meshes, setMeshes] = useState<MeshState[]>([])
   const [showWebview, setShowWebview] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  const stlAttachments = useMemo(() => attachments.filter(isStlAttachment), [attachments])
+  const meshAttachments = useMemo(() => attachments.filter(isMeshAttachment), [attachments])
   const htmlAttachment = useMemo(() => attachments.find(isHtmlAttachment), [attachments])
   const webviewUrl = htmlAttachment?.viewerUrl ?? htmlAttachment?.downloadUrl
 
   useEffect(() => {
     const container = containerRef.current
 
-    if (!container || stlAttachments.length === 0 || showWebview) {
+    if (!container || showWebview) {
       return
     }
+    if (meshAttachments.length === 0) {
+      setMeshes([])
+      setLoading(false)
+      setLoadError(null)
+      return
+    }
+
+    setLoading(true)
+    setLoadError(null)
+    setMeshes([])
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color('#f8fafc')
@@ -73,40 +87,42 @@ export default function Clinical3DViewer({ attachments }: { attachments: OrderAt
     const group = new THREE.Group()
     scene.add(group)
 
-    const loader = new STLLoader()
+    const stlLoader = new STLLoader()
+    const plyLoader = new PLYLoader()
+    const abortController = new AbortController()
     let disposed = false
 
-    Promise.all(stlAttachments.map((attachment, index) => new Promise<MeshState>((resolve, reject) => {
-      loader.load(
-        attachment.downloadUrl!,
-        (geometry) => {
-          geometry.computeVertexNormals()
-          geometry.center()
+    Promise.all(meshAttachments.map(async (attachment, index) => {
+      const response = await fetch(attachment.viewerUrl ?? attachment.downloadUrl!, { signal: abortController.signal })
+      if (!response.ok) throw new Error(`Falha ao carregar ${attachment.fileName}`)
+      const buffer = await response.arrayBuffer()
+      const geometry = attachment.fileName.toLowerCase().endsWith('.ply')
+        ? plyLoader.parse(buffer)
+        : stlLoader.parse(buffer)
+      if (!geometry.getAttribute('normal')) geometry.computeVertexNormals()
+      geometry.computeBoundingBox()
 
-          const material = new THREE.MeshStandardMaterial({
-            color: palette[index % palette.length],
-            metalness: 0.02,
-            roughness: 0.58,
-            transparent: true,
-            opacity: index === 0 ? 0.95 : 0.48,
-            wireframe: mode === 'wireframe',
-          })
-          const mesh = new THREE.Mesh(geometry, material)
-          mesh.name = String(attachment.id)
-          group.add(mesh)
-          meshesRef.current[String(attachment.id)] = mesh
+      const material = new THREE.MeshStandardMaterial({
+        color: palette[index % palette.length],
+        metalness: 0.02,
+        roughness: 0.58,
+        transparent: true,
+        opacity: index === 0 ? 0.95 : 0.48,
+        wireframe: mode === 'wireframe',
+        vertexColors: Boolean(geometry.getAttribute('color')),
+      })
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.name = String(attachment.id)
+      group.add(mesh)
+      meshesRef.current[String(attachment.id)] = mesh
 
-          resolve({
-            id: String(attachment.id),
-            name: attachment.fileName,
-            visible: true,
-            opacity: material.opacity,
-          })
-        },
-        undefined,
-        reject
-      )
-    }))).then((loadedMeshes) => {
+      return {
+        id: String(attachment.id),
+        name: attachment.fileName,
+        visible: true,
+        opacity: material.opacity,
+      }
+    })).then((loadedMeshes) => {
       if (disposed) return
 
       const box = new THREE.Box3().setFromObject(group)
@@ -117,8 +133,12 @@ export default function Clinical3DViewer({ attachments }: { attachments: OrderAt
       controls.target.set(0, 0, 0)
       controls.update()
       setMeshes(loadedMeshes)
-    }).catch(() => {
+      setLoading(false)
+    }).catch((cause) => {
+      if (disposed || cause instanceof DOMException && cause.name === 'AbortError') return
       setMeshes([])
+      setLoading(false)
+      setLoadError('Não foi possível abrir esta malha. Verifique o arquivo ou tente gerar um novo link.')
     })
 
     const resizeObserver = new ResizeObserver(() => {
@@ -129,16 +149,19 @@ export default function Clinical3DViewer({ attachments }: { attachments: OrderAt
     })
     resizeObserver.observe(container)
 
+    let animationFrame = 0
     const animate = () => {
       if (disposed) return
       controls.update()
       renderer.render(scene, camera)
-      requestAnimationFrame(animate)
+      animationFrame = requestAnimationFrame(animate)
     }
     animate()
 
     return () => {
       disposed = true
+      abortController.abort()
+      cancelAnimationFrame(animationFrame)
       resizeObserver.disconnect()
       controls.dispose()
       Object.values(meshesRef.current).forEach((mesh) => {
@@ -154,7 +177,7 @@ export default function Clinical3DViewer({ attachments }: { attachments: OrderAt
       renderer.dispose()
       renderer.domElement.remove()
     }
-  }, [mode, showWebview, stlAttachments])
+  }, [showWebview, meshAttachments])
 
   const updateMesh = (id: string, updates: Partial<MeshState>) => {
     setMeshes((current) => current.map((meshState) => {
@@ -197,7 +220,9 @@ export default function Clinical3DViewer({ attachments }: { attachments: OrderAt
         <iframe className="clinical-webview" src={webviewUrl} sandbox="allow-scripts allow-same-origin" title="Exocad Webview 3D" />
       ) : (
         <div className="clinical-canvas" ref={containerRef}>
-          {stlAttachments.length === 0 && <div className="viewer-empty"><strong>Nenhum STL disponível</strong><span>Envie ou selecione arquivos .stl para inspeção 3D.</span></div>}
+          {meshAttachments.length === 0 && <div className="viewer-empty"><strong>Nenhuma malha disponível</strong><span>Selecione um arquivo .stl ou .ply para inspeção 3D.</span></div>}
+          {loading && <div className="viewer-feedback"><span className="viewer-spinner" /><strong>Preparando visualização 3D...</strong></div>}
+          {loadError && <div className="viewer-feedback error"><strong>Não foi possível abrir a malha</strong><span>{loadError}</span></div>}
         </div>
       )}
       <div className="mesh-controls">

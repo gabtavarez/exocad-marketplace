@@ -1,6 +1,7 @@
 package com.exomarket.dto;
 
 import com.exomarket.AttachmentStage;
+import com.exomarket.ApplicationStatus;
 import com.exomarket.OrderStatus;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -18,7 +19,8 @@ public record OrderResponse(
         OffsetDateTime updatedAt,
         List<OrderItemResponse> items,
         List<OrderAttachmentResponse> attachments,
-        String revisionFeedback
+        String revisionFeedback,
+        ApplicationStatus applicationStatus
 ) {
 
     public record OrderItemResponse(

@@ -6,6 +6,8 @@ import com.exomarket.config.StorageProperties;
 import com.exomarket.domain.Order;
 import com.exomarket.domain.OrderAttachment;
 import com.exomarket.dto.AttachmentDownloadUrlResponse;
+import com.exomarket.dto.AvatarUploadUrlResponse;
+import com.exomarket.dto.CreateAvatarUploadUrlRequest;
 import com.exomarket.dto.CreateUploadUrlRequest;
 import com.exomarket.dto.UploadUrlResponse;
 import com.exomarket.repository.OrderAttachmentRepository;
@@ -14,11 +16,16 @@ import com.exomarket.security.AuthenticatedUser;
 import jakarta.persistence.EntityNotFoundException;
 import java.net.URI;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -84,6 +91,26 @@ public class FileStorageService {
         );
     }
 
+    public AvatarUploadUrlResponse createAvatarUploadUrl(
+            CreateAvatarUploadUrlRequest request,
+            AuthenticatedUser currentUser
+    ) {
+        String extension = validateAvatarFile(request.fileName(), request.mimeType());
+        String storagePath = "avatars/%d/%s%s".formatted(currentUser.id(), UUID.randomUUID(), extension);
+        OffsetDateTime expiresAt = OffsetDateTime.now(ZoneOffset.UTC)
+                .plusMinutes(storageProperties.presignedUrlExpirationMinutes());
+        String uploadUrl = buildPresignedPutUrl(
+                storageProperties.avatarBucket(), storagePath, request.mimeType(), expiresAt
+        );
+        URI publicEndpoint = URI.create(storageProperties.publicEndpoint());
+        String host = publicEndpoint.getHost()
+                + (publicEndpoint.getPort() > -1 ? ":" + publicEndpoint.getPort() : "");
+        String publicUrl = "%s://%s/%s/%s".formatted(
+                publicEndpoint.getScheme(), host, storageProperties.avatarBucket(), encodePath(storagePath)
+        );
+        return new AvatarUploadUrlResponse(uploadUrl, publicUrl, expiresAt);
+    }
+
     @Transactional
     public void completeUpload(Long orderId, Long attachmentId, AuthenticatedUser currentUser) {
         OrderAttachment attachment = getAttachment(orderId, attachmentId);
@@ -106,9 +133,34 @@ public class FileStorageService {
 
         return new AttachmentDownloadUrlResponse(
                 attachment.getId(),
-                buildPresignedGetUrl(attachment.getStoragePath(), expiresAt),
+                buildPresignedGetUrl(
+                        attachment.getStoragePath(), attachment.getOriginalFileName(), "attachment", expiresAt
+                ),
+                buildPresignedGetUrl(
+                        attachment.getStoragePath(), attachment.getOriginalFileName(), "inline", expiresAt
+                ),
                 expiresAt
         );
+    }
+
+    @Transactional
+    public void deleteDeliveryAttachment(Long orderId, Long attachmentId, AuthenticatedUser currentUser) {
+        OrderAttachment attachment = getAttachment(orderId, attachmentId);
+        Order order = attachment.getOrder();
+        boolean editableStatus = order.getStatus() == com.exomarket.OrderStatus.IN_PROGRESS
+                || order.getStatus() == com.exomarket.OrderStatus.REVISION_REQUESTED;
+        boolean allowed = currentUser.role() == UserRole.DESIGNER
+                && currentUser.id().equals(order.getDesignerId())
+                && attachment.getAttachmentStage() == AttachmentStage.CAD_DELIVERY
+                && editableStatus;
+        if (!allowed) {
+            throw new AccessDeniedException("Only the assigned designer can replace a delivery before review");
+        }
+
+        if (Boolean.TRUE.equals(attachment.getUploaded())) {
+            deleteStorageObject(attachment.getStoragePath());
+        }
+        attachmentRepository.delete(attachment);
     }
 
     private OrderAttachment getAttachment(Long orderId, Long attachmentId) {
@@ -162,16 +214,89 @@ public class FileStorageService {
         }
     }
 
-    private String buildPresignedPutUrl(String storagePath, String mimeType, OffsetDateTime expiresAt) {
-        return buildPresignedUrl("PUT", storagePath, mimeType, expiresAt);
+    private String validateAvatarFile(String fileName, String mimeType) {
+        String lowerCaseName = fileName.toLowerCase();
+        return switch (mimeType.toLowerCase()) {
+            case "image/jpeg" -> {
+                if (!lowerCaseName.endsWith(".jpg") && !lowerCaseName.endsWith(".jpeg")) {
+                    throw new IllegalArgumentException("The avatar extension does not match its image type");
+                }
+                yield ".jpg";
+            }
+            case "image/png" -> {
+                if (!lowerCaseName.endsWith(".png")) {
+                    throw new IllegalArgumentException("The avatar extension does not match its image type");
+                }
+                yield ".png";
+            }
+            case "image/webp" -> {
+                if (!lowerCaseName.endsWith(".webp")) {
+                    throw new IllegalArgumentException("The avatar extension does not match its image type");
+                }
+                yield ".webp";
+            }
+            default -> throw new IllegalArgumentException("Use a JPG, PNG or WebP image for the avatar");
+        };
     }
 
-    private String buildPresignedGetUrl(String storagePath, OffsetDateTime expiresAt) {
-        return buildPresignedUrl("GET", storagePath, null, expiresAt);
+    private String buildPresignedPutUrl(String storagePath, String mimeType, OffsetDateTime expiresAt) {
+        return buildPresignedPutUrl(storageProperties.bucket(), storagePath, mimeType, expiresAt);
+    }
+
+    private String buildPresignedPutUrl(
+            String bucket,
+            String storagePath,
+            String mimeType,
+            OffsetDateTime expiresAt
+    ) {
+        return buildPresignedUrl("PUT", bucket, storagePath, mimeType, expiresAt);
+    }
+
+    private String buildPresignedGetUrl(
+            String storagePath,
+            String fileName,
+            String disposition,
+            OffsetDateTime expiresAt
+    ) {
+        String safeFileName = fileName.replace("\"", "");
+        String contentDisposition = "%s; filename=\"%s\"".formatted(disposition, safeFileName);
+        return buildPresignedUrl(
+                "GET",
+                storageProperties.bucket(),
+                storagePath,
+                null,
+                expiresAt,
+                storageProperties.publicEndpoint(),
+                Map.of("response-content-disposition", contentDisposition)
+        );
     }
 
     private String buildPresignedUrl(String method, String storagePath, String mimeType, OffsetDateTime expiresAt) {
-        URI endpoint = URI.create(storageProperties.publicEndpoint());
+        return buildPresignedUrl(method, storageProperties.bucket(), storagePath, mimeType, expiresAt);
+    }
+
+    private String buildPresignedUrl(
+            String method,
+            String bucket,
+            String storagePath,
+            String mimeType,
+            OffsetDateTime expiresAt
+    ) {
+        return buildPresignedUrl(
+                method, bucket, storagePath, mimeType, expiresAt, storageProperties.publicEndpoint(), Map.of()
+        );
+    }
+
+    private String buildPresignedUrl(
+            String method,
+            String bucket,
+            String storagePath,
+            String mimeType,
+            OffsetDateTime expiresAt,
+            String endpointValue,
+            Map<String, String> extraQueryParameters
+    ) {
+        URI endpoint = URI.create(endpointValue);
         String host = endpoint.getHost() + (endpoint.getPort() > -1 ? ":" + endpoint.getPort() : "");
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         String amzDate = now.format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"));
@@ -179,21 +304,22 @@ public class FileStorageService {
         String scope = "%s/%s/%s/aws4_request".formatted(dateStamp, storageProperties.region(), SERVICE);
         long expiresInSeconds = Math.max(1, expiresAt.toEpochSecond() - now.toEpochSecond());
         String credential = storageProperties.accessKey() + "/" + scope;
-        String canonicalUri = "/" + storageProperties.bucket() + "/" + encodePath(storagePath);
-        String signedHeaders = "GET".equals(method) ? "host" : "content-type%3Bhost";
-
-        String canonicalQueryString = "X-Amz-Algorithm=%s&X-Amz-Credential=%s&X-Amz-Date=%s&X-Amz-Expires=%d&X-Amz-SignedHeaders=%s"
-                .formatted(
-                        ALGORITHM,
-                        encodeQuery(credential),
-                        amzDate,
-                        expiresInSeconds,
-                        signedHeaders
-                );
-        String canonicalHeaders = "GET".equals(method)
+        String canonicalUri = "/" + bucket + "/" + encodePath(storagePath);
+        Map<String, String> queryParameters = new TreeMap<>();
+        queryParameters.put("X-Amz-Algorithm", ALGORITHM);
+        queryParameters.put("X-Amz-Credential", credential);
+        queryParameters.put("X-Amz-Date", amzDate);
+        queryParameters.put("X-Amz-Expires", Long.toString(expiresInSeconds));
+        queryParameters.put("X-Amz-SignedHeaders", canonicalSignedHeaders(method));
+        queryParameters.putAll(extraQueryParameters);
+        String canonicalQueryString = queryParameters.entrySet().stream()
+                .map(entry -> encodeQuery(entry.getKey()) + "=" + encodeQuery(entry.getValue()))
+                .reduce((left, right) -> left + "&" + right)
+                .orElse("");
+        String canonicalSignedHeaders = canonicalSignedHeaders(method);
+        String canonicalHeaders = "host".equals(canonicalSignedHeaders)
                 ? "host:%s\n".formatted(host)
                 : "content-type:%s\nhost:%s\n".formatted(mimeType, host);
-        String canonicalSignedHeaders = "GET".equals(method) ? "host" : "content-type;host";
         String canonicalRequest = "%s\n%s\n%s\n%s\n%s\nUNSIGNED-PAYLOAD"
                 .formatted(method, canonicalUri, canonicalQueryString, canonicalHeaders, canonicalSignedHeaders);
         String stringToSign = "%s\n%s\n%s\n%s"
@@ -202,6 +328,37 @@ public class FileStorageService {
 
         return "%s://%s%s?%s&X-Amz-Signature=%s"
                 .formatted(endpoint.getScheme(), host, canonicalUri, canonicalQueryString, signature);
+    }
+
+    private String canonicalSignedHeaders(String method) {
+        return "GET".equals(method) || "DELETE".equals(method) ? "host" : "content-type;host";
+    }
+
+    private void deleteStorageObject(String storagePath) {
+        OffsetDateTime expiresAt = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(1);
+        String deleteUrl = buildPresignedUrl(
+                "DELETE",
+                storageProperties.bucket(),
+                storagePath,
+                null,
+                expiresAt,
+                storageProperties.endpoint(),
+                Map.of()
+        );
+        try {
+            HttpResponse<Void> response = HttpClient.newHttpClient().send(
+                    HttpRequest.newBuilder(URI.create(deleteUrl)).DELETE().build(),
+                    HttpResponse.BodyHandlers.discarding()
+            );
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException("Storage rejected attachment deletion");
+            }
+        } catch (java.io.IOException exception) {
+            throw new IllegalStateException("Unable to delete attachment from storage", exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Attachment deletion was interrupted", exception);
+        }
     }
 
     private String encodePath(String path) {

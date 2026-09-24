@@ -123,7 +123,9 @@ public class AuthService {
     private AuthResponse response(User user) {
         return new AuthResponse(
                 jwtService.generate(user),
-                new AuthResponse.UserResponse(user.getId(), user.getName(), user.getEmail(), user.getRole())
+                new AuthResponse.UserResponse(
+                        user.getId(), user.getName(), user.getEmail(), user.getRole(), user.getAvatarUrl()
+                )
         );
     }
 }
