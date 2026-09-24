@@ -19,6 +19,7 @@ import {
   GitCompare,
   LayoutDashboard,
   LockKeyhole,
+  LogOut,
   MessageCircle,
   Moon,
   MoreHorizontal,
@@ -42,6 +43,7 @@ import {
 import Clinical3DViewer from '@/components/Clinical3DViewer'
 import { acceptOrder, approveOrder, createOrder, createUploadUrl, getOrders, requestOrderRevision, submitOrderDelivery, uploadFileToStorage } from '@/services/orderService'
 import type { AttachmentStage, CreateOrderRequest, OrderAttachment, OrderResponse, OrderStatus } from '@/types/order'
+import { useAuth } from '@/contexts/AuthContext'
 
 type DashboardOrder = {
   id: string
@@ -59,7 +61,6 @@ type CaseFile = {
   status: 'ready' | 'uploading' | 'uploaded' | 'error'
 }
 
-const FALLBACK_USER_ID = 1
 const clinicalInputExtensions = ['.stl', '.ply']
 const cadDeliveryExtensions = ['.stl', '.constructioninfo', '.html']
 
@@ -177,8 +178,9 @@ function Brand() {
   return <div className="brand"><div className="brand-mark"><span className="brand-cross">+</span></div><div><div className="brand-name">dentform</div><div className="brand-caption">DIGITAL DENTISTRY</div></div></div>
 }
 
-function Header({ role, setRole, dark, setDark }: { role: 'Dentista' | 'Cadista'; setRole: (role: 'Dentista' | 'Cadista') => void; dark: boolean; setDark: (value: boolean) => void }) {
-  return <header className="topbar"><div className="topbar-left"><button className="mobile-menu" aria-label="Abrir menu"><PanelLeft /></button><Brand /></div><div className="topbar-actions"><div className="role-switcher" aria-label="Seletor de perfil"><button className={role === 'Dentista' ? 'active' : ''} onClick={() => setRole('Dentista')}><UserRound />Dentista</button><button className={role === 'Cadista' ? 'active' : ''} onClick={() => setRole('Cadista')}><UsersRound />Cadista</button></div><button className="icon-button" aria-label="Alternar tema" onClick={() => setDark(!dark)}>{dark ? <Sun /> : <Moon />}</button><button className="notification-button" aria-label="Notificações"><Bell /><span /></button><div className="profile-avatar">DM</div><ChevronDown className="chevron" /></div></header>
+function Header({ role, userName, onLogout, dark, setDark }: { role: 'Dentista' | 'Cadista'; userName: string; onLogout: () => void; dark: boolean; setDark: (value: boolean) => void }) {
+  const initials = userName.split(' ').slice(0, 2).map((part) => part[0]).join('').toUpperCase()
+  return <header className="topbar"><div className="topbar-left"><button className="mobile-menu" aria-label="Abrir menu"><PanelLeft /></button><Brand /></div><div className="topbar-actions"><div className="role-switcher" aria-label="Perfil autenticado"><button className="active" type="button">{role === 'Dentista' ? <UserRound /> : <UsersRound />}{role}</button></div><button className="icon-button" aria-label="Alternar tema" onClick={() => setDark(!dark)}>{dark ? <Sun /> : <Moon />}</button><button className="notification-button" aria-label="Notificações"><Bell /><span /></button><div className="profile-avatar">{initials || 'U'}</div><button className="icon-button" aria-label="Terminar sessão" title="Terminar sessão" onClick={onLogout}><LogOut /></button></div></header>
 }
 
 function Sidebar({ active, setActive, role, orderCount }: { active: string; setActive: (label: string) => void; role: string; orderCount: number }) {
@@ -214,7 +216,6 @@ function NewCase({ onBack, onSubmit }: { onBack: () => void; onSubmit: (request:
 
     try {
       await onSubmit({
-        userId: FALLBACK_USER_ID,
         title: patient.trim() || 'Paciente sem identificação',
         description: reference.trim() || undefined,
         items: selectedTeeth.map((tooth) => ({
@@ -307,7 +308,8 @@ function DesignerBoard() {
 }
 
 export default function OdontoMarketplace() {
-  const [role, setRole] = useState<'Dentista' | 'Cadista'>('Dentista')
+  const { user, signOut } = useAuth()
+  const role: 'Dentista' | 'Cadista' = user?.role === 'DESIGNER' ? 'Cadista' : 'Dentista'
   const [active, setActive] = useState('Visão geral')
   const [dark, setDark] = useState(false)
   const [orders, setOrders] = useState<DashboardOrder[]>(fallbackOrders)
@@ -370,5 +372,5 @@ export default function OdontoMarketplace() {
         ? <DesignerBoard />
         : <Dashboard orders={orders} usingFallback={usingFallback} onNewCase={() => setActive('Novo Caso')} onReview={() => setActive('Meus Casos')} />
 
-  return <div className={dark ? 'app-shell dark' : 'app-shell'}><Header role={role} setRole={(nextRole) => { setRole(nextRole); setActive('Visão geral') }} dark={dark} setDark={setDark}/><div className="app-body"><Sidebar active={active} setActive={setActive} role={role} orderCount={orders.length}/><main className="main-area">{screen}</main></div></div>
+  return <div className={dark ? 'app-shell dark' : 'app-shell'}><Header role={role} userName={user?.name ?? 'Utilizador'} onLogout={signOut} dark={dark} setDark={setDark}/><div className="app-body"><Sidebar active={active} setActive={setActive} role={role} orderCount={orders.length}/><main className="main-area">{screen}</main></div></div>
 }

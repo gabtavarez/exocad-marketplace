@@ -8,10 +8,12 @@ import com.exomarket.dto.RequestRevisionRequest;
 import com.exomarket.dto.UploadUrlResponse;
 import com.exomarket.service.FileStorageService;
 import com.exomarket.service.OrderService;
+import com.exomarket.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,51 +35,59 @@ public class OrderController {
     }
 
     @PostMapping
-    public ResponseEntity<OrderResponse> create(@Valid @RequestBody CreateOrderRequest request) {
-        OrderResponse response = orderService.create(request);
+    public ResponseEntity<OrderResponse> create(
+            @Valid @RequestBody CreateOrderRequest request,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ) {
+        OrderResponse response = orderService.create(request, currentUser);
         return ResponseEntity
                 .created(URI.create("/api/orders/" + response.id()))
                 .body(response);
     }
 
     @GetMapping
-    public List<OrderResponse> list(@RequestParam(required = false) OrderStatus status) {
-        return orderService.list(status);
+    public List<OrderResponse> list(
+            @RequestParam(required = false) OrderStatus status,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ) {
+        return orderService.list(status, currentUser);
     }
 
     @GetMapping("/{id}")
-    public OrderResponse getById(@PathVariable Long id) {
-        return orderService.getById(id);
+    public OrderResponse getById(@PathVariable Long id, @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        return orderService.getById(id, currentUser);
     }
 
     @PostMapping("/{id}/accept")
-    public OrderResponse accept(@PathVariable Long id) {
-        return orderService.accept(id);
+    public OrderResponse accept(@PathVariable Long id, @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        return orderService.accept(id, currentUser);
     }
 
     @PostMapping("/{id}/submit-delivery")
-    public OrderResponse submitDelivery(@PathVariable Long id) {
-        return orderService.submitDelivery(id);
+    public OrderResponse submitDelivery(@PathVariable Long id, @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        return orderService.submitDelivery(id, currentUser);
     }
 
     @PostMapping("/{id}/approve")
-    public OrderResponse approve(@PathVariable Long id) {
-        return orderService.approve(id);
+    public OrderResponse approve(@PathVariable Long id, @AuthenticationPrincipal AuthenticatedUser currentUser) {
+        return orderService.approve(id, currentUser);
     }
 
     @PostMapping("/{id}/request-revision")
     public OrderResponse requestRevision(
             @PathVariable Long id,
-            @Valid @RequestBody RequestRevisionRequest request
+            @Valid @RequestBody RequestRevisionRequest request,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
     ) {
-        return orderService.requestRevision(id, request.feedback());
+        return orderService.requestRevision(id, request.feedback(), currentUser);
     }
 
     @PostMapping("/{orderId}/upload-url")
     public UploadUrlResponse createUploadUrl(
             @PathVariable Long orderId,
-            @Valid @RequestBody CreateUploadUrlRequest request
+            @Valid @RequestBody CreateUploadUrlRequest request,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
     ) {
-        return fileStorageService.createUploadUrl(orderId, request);
+        return fileStorageService.createUploadUrl(orderId, request, currentUser);
     }
 }

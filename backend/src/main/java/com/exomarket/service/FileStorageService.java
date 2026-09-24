@@ -1,6 +1,7 @@
 package com.exomarket.service;
 
 import com.exomarket.AttachmentStage;
+import com.exomarket.UserRole;
 import com.exomarket.config.StorageProperties;
 import com.exomarket.domain.Order;
 import com.exomarket.domain.OrderAttachment;
@@ -8,6 +9,7 @@ import com.exomarket.dto.CreateUploadUrlRequest;
 import com.exomarket.dto.UploadUrlResponse;
 import com.exomarket.repository.OrderAttachmentRepository;
 import com.exomarket.repository.OrderRepository;
+import com.exomarket.security.AuthenticatedUser;
 import jakarta.persistence.EntityNotFoundException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -20,6 +22,7 @@ import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -43,10 +46,15 @@ public class FileStorageService {
     }
 
     @Transactional
-    public UploadUrlResponse createUploadUrl(Long orderId, CreateUploadUrlRequest request) {
+    public UploadUrlResponse createUploadUrl(
+            Long orderId,
+            CreateUploadUrlRequest request,
+            AuthenticatedUser currentUser
+    ) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + orderId));
 
+        validateUploadPermission(order, request.attachmentStage(), currentUser);
         validateSupportedFile(request.fileName(), request.attachmentStage());
 
         String storagePath = "orders/%d/%s-%s".formatted(
@@ -73,6 +81,20 @@ public class FileStorageService {
                 storagePath,
                 expiresAt
         );
+    }
+
+    private void validateUploadPermission(
+            Order order,
+            AttachmentStage attachmentStage,
+            AuthenticatedUser currentUser
+    ) {
+        boolean allowed = attachmentStage == AttachmentStage.CLINICAL_INPUT
+                ? currentUser.role() == UserRole.DENTIST && currentUser.id().equals(order.getUserId())
+                : currentUser.role() == UserRole.DESIGNER && currentUser.id().equals(order.getDesignerId());
+
+        if (!allowed) {
+            throw new AccessDeniedException("User cannot upload this attachment type for the order");
+        }
     }
 
     private void validateSupportedFile(String fileName, AttachmentStage attachmentStage) {

@@ -8,7 +8,6 @@ export type ToothItem = {
 }
 
 export type CreateOrderRequest = {
-  userId: number
   title: string
   description?: string
   items: ToothItem[]
@@ -24,6 +23,7 @@ export type OrderItemResponse = {
 export type OrderResponse = {
   id: number
   userId: number
+  designerId?: number
   status: OrderStatus
   title: string
   description?: string

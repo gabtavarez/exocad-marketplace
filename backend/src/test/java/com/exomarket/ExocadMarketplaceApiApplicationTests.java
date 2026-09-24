@@ -2,6 +2,7 @@ package com.exomarket;
 
 import com.exomarket.repository.OrderRepository;
 import com.exomarket.repository.OrderAttachmentRepository;
+import com.exomarket.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -20,6 +21,9 @@ class ExocadMarketplaceApiApplicationTests {
 
 	@MockitoBean
 	private OrderAttachmentRepository orderAttachmentRepository;
+
+	@MockitoBean
+	private UserRepository userRepository;
 
 	@Test
 	void contextLoads() {

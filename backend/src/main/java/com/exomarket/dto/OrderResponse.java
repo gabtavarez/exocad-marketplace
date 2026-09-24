@@ -8,6 +8,7 @@ import java.util.List;
 public record OrderResponse(
         Long id,
         Long userId,
+        Long designerId,
         OrderStatus status,
         String title,
         String description,

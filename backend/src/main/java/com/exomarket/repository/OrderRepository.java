@@ -8,4 +8,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
     List<Order> findByStatus(OrderStatus status);
+
+    List<Order> findByUserId(Long userId);
+
+    List<Order> findByUserIdAndStatus(Long userId, OrderStatus status);
+
+    List<Order> findByDesignerIdAndStatus(Long designerId, OrderStatus status);
 }

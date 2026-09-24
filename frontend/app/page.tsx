@@ -1,5 +1,5 @@
-import OdontoMarketplace from '@/components/odonto-marketplace'
+import AuthenticatedApp from '@/components/AuthenticatedApp'
 
 export default function Page() {
-  return <OdontoMarketplace />
+  return <AuthenticatedApp />
 }

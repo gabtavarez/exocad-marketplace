@@ -1,6 +1,15 @@
 spring:
   application:
     name: exocad-marketplace-api
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5433/exomarket_db}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres_password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
 
 storage:
   s3:
@@ -11,3 +20,10 @@ storage:
     access-key: minioadmin
     secret-key: minioadmin
     presigned-url-expiration-minutes: 15
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:exomarket-local-jwt-secret-change-me-2026}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:720}
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:223857881828-7a3one4ov0098h7ppdhk0sia3ukmp4u9.apps.googleusercontent.com}
