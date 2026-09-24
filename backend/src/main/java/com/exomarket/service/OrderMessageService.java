@@ -5,12 +5,15 @@ import com.exomarket.domain.Order;
 import com.exomarket.domain.OrderMessage;
 import com.exomarket.domain.User;
 import com.exomarket.dto.OrderMessageResponse;
+import com.exomarket.dto.ConversationSummaryResponse;
+import com.exomarket.repository.NotificationRepository;
 import com.exomarket.repository.OrderMessageRepository;
 import com.exomarket.repository.OrderRepository;
 import com.exomarket.repository.UserRepository;
 import com.exomarket.security.AuthenticatedUser;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
+import java.util.Comparator;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,17 +25,31 @@ public class OrderMessageService {
     private final OrderMessageRepository messageRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final NotificationRepository notificationRepository;
 
     public OrderMessageService(
             OrderRepository orderRepository,
             OrderMessageRepository messageRepository,
             UserRepository userRepository,
-            NotificationService notificationService
+            NotificationService notificationService,
+            NotificationRepository notificationRepository
     ) {
         this.orderRepository = orderRepository;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
+        this.notificationRepository = notificationRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ConversationSummaryResponse> conversations(AuthenticatedUser currentUser) {
+        return orderRepository.findConversationOrders(currentUser.id()).stream()
+                .map(order -> toConversation(order, currentUser))
+                .sorted(Comparator.comparing(
+                        ConversationSummaryResponse::lastMessageCreatedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                ))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -100,5 +117,28 @@ public class OrderMessageService {
 
     private String summarize(String content) {
         return content.length() <= 120 ? content : content.substring(0, 117) + "...";
+    }
+
+    private ConversationSummaryResponse toConversation(Order order, AuthenticatedUser currentUser) {
+        Long otherPartyId = currentUser.role() == UserRole.DENTIST ? order.getDesignerId() : order.getUserId();
+        User otherParty = userRepository.findById(otherPartyId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found: " + otherPartyId));
+        OrderMessage lastMessage = messageRepository.findTopByOrderIdOrderByCreatedAtDesc(order.getId())
+                .orElse(null);
+        long unreadCount = notificationRepository.countByUserIdAndReadFalseAndLinkUrlAndTitleStartingWith(
+                currentUser.id(),
+                "/orders/" + order.getId(),
+                "Nova mensagem"
+        );
+        return new ConversationSummaryResponse(
+                order.getId(),
+                order.getTitle(),
+                "Caso #" + String.format("%05d", order.getId()),
+                otherParty.getName(),
+                otherParty.getAvatarUrl(),
+                lastMessage == null ? "Conversa disponível" : summarize(lastMessage.getContent()),
+                lastMessage == null ? null : lastMessage.getCreatedAt(),
+                unreadCount
+        );
     }
 }

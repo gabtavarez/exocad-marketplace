@@ -22,6 +22,19 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     List<Order> findByDesignerIdAndStatus(Long designerId, OrderStatus status);
 
+    @Query("""
+            select orders from Order orders
+            where orders.designerId is not null
+              and (orders.userId = :userId or orders.designerId = :userId)
+              and (
+                    orders.status in (com.exomarket.OrderStatus.IN_PROGRESS,
+                                      com.exomarket.OrderStatus.IN_REVIEW,
+                                      com.exomarket.OrderStatus.REVISION_REQUESTED)
+                    or exists (select message.id from OrderMessage message where message.order = orders)
+              )
+            """)
+    List<Order> findConversationOrders(@Param("userId") Long userId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select orders from Order orders where orders.id = :id")
     Optional<Order> findByIdForUpdate(@Param("id") Long id);

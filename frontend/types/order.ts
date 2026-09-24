@@ -89,3 +89,14 @@ export type OrderMessage = {
   content: string
   createdAt?: string
 }
+
+export type ConversationSummary = {
+  orderId: number
+  orderTitle: string
+  patientReference: string
+  otherPartyName: string
+  otherPartyAvatarUrl?: string
+  lastMessageText: string
+  lastMessageCreatedAt?: string
+  unreadCount: number
+}

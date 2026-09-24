@@ -1,4 +1,4 @@
-import type { AttachmentDownloadUrlResponse, CreateOrderRequest, CreateUploadUrlRequest, OrderApplication, OrderMessage, OrderResponse, OrderStatus, UploadUrlResponse } from '@/types/order'
+import type { AttachmentDownloadUrlResponse, ConversationSummary, CreateOrderRequest, CreateUploadUrlRequest, OrderApplication, OrderMessage, OrderResponse, OrderStatus, UploadUrlResponse } from '@/types/order'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080'
 const TOKEN_KEY = 'exomarket.auth.token'
@@ -106,6 +106,10 @@ export function deleteAttachment(orderId: string | number, attachmentId: string 
 
 export function getOrderMessages(orderId: string | number): Promise<OrderMessage[]> {
   return request<OrderMessage[]>(`/api/orders/${orderId}/messages`)
+}
+
+export function getConversations(): Promise<ConversationSummary[]> {
+  return request<ConversationSummary[]>('/api/orders/conversations')
 }
 
 export function sendOrderMessage(orderId: string | number, content: string): Promise<OrderMessage> {

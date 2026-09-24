@@ -16,6 +16,12 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     Optional<Notification> findByIdAndUserId(Long id, Long userId);
 
+    long countByUserIdAndReadFalseAndLinkUrlAndTitleStartingWith(
+            Long userId,
+            String linkUrl,
+            String titlePrefix
+    );
+
     @Modifying
     @Query("update Notification notification set notification.read = true "
             + "where notification.user.id = :userId and notification.read = false")

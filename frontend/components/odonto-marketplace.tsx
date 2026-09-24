@@ -27,7 +27,6 @@ import {
   Search,
   Settings2,
   ShieldCheck,
-  Sparkles,
   UploadCloud,
   Trash2,
   UserCog,
@@ -51,6 +50,7 @@ import {
   createUploadUrl,
   deleteAttachment,
   getAttachmentDownloadUrl,
+  getConversations,
   getOrderById,
   getOrderApplications,
   getOrderMessages,
@@ -60,7 +60,7 @@ import {
   submitOrderDelivery,
   uploadFileToStorage,
 } from '@/services/orderService'
-import type { AttachmentStage, CreateOrderRequest, OrderApplication, OrderAttachment, OrderMessage, OrderResponse, OrderStatus } from '@/types/order'
+import type { AttachmentStage, ConversationSummary, CreateOrderRequest, OrderApplication, OrderAttachment, OrderMessage, OrderResponse, OrderStatus } from '@/types/order'
 import type { FinancialSummary, WalletTransaction, WalletTransactionType } from '@/types/financial'
 import type { Notification } from '@/types/notification'
 
@@ -195,13 +195,13 @@ function Header({ role, userName, avatarUrl, onProfile, onLogout, onNotification
   return <header className="topbar"><div className="topbar-left"><button className="mobile-menu" aria-label="Abrir menu"><PanelLeft /></button><Brand /></div><div className="topbar-actions"><div className="role-switcher" aria-label="Perfil autenticado"><button className="active" type="button">{role === 'Dentista' ? <UserRound /> : <UsersRound />}{role}</button></div><NotificationBell onOpenLink={onNotificationLink} /><button className="profile-trigger" onClick={onProfile} title="Editar perfil"><UserAvatar name={userName} avatarUrl={avatarUrl} className="profile-avatar" /><strong>{userName}</strong></button><button className="icon-button logout-button" aria-label="Sair" title="Sair e trocar de conta" onClick={onLogout}><LogOut /></button></div></header>
 }
 
-function Sidebar({ active, setActive, role, orderCount, userName, avatarUrl, onLogout, onProfile, onComingSoon }: { active: string; setActive: (label: string) => void; role: RoleLabel; orderCount: number; userName: string; avatarUrl?: string; onLogout: () => void; onProfile: () => void; onComingSoon: (feature: string) => void }) {
+function Sidebar({ active, setActive, role, orderCount, userName, avatarUrl, onLogout, onProfile }: { active: string; setActive: (label: string) => void; role: RoleLabel; orderCount: number; userName: string; avatarUrl?: string; onLogout: () => void; onProfile: () => void }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const navItems = role === 'Dentista'
     ? [{ label: 'Visão geral', icon: LayoutDashboard }, { label: 'Meus Casos', icon: FileCheck2 }, { label: 'Novo Caso', icon: Plus }]
     : [{ label: 'Visão geral', icon: LayoutDashboard }, { label: 'Meus Casos', icon: FileCheck2 }]
 
-  return <aside className="sidebar"><nav className="main-nav sidebar-primary">{navItems.map(({ label, icon: Icon }) => <button key={label} className={active === label ? 'nav-item active' : 'nav-item'} onClick={() => setActive(label)}><Icon />{label}{label === 'Meus Casos' && <span className="nav-count">{orderCount}</span>}</button>)}</nav><div className="sidebar-label">GESTÃO</div><nav className="main-nav"><button className={active === 'Financeiro' ? 'nav-item active' : 'nav-item'} onClick={() => setActive('Financeiro')}><WalletCards />Financeiro</button><button className="nav-item" onClick={() => onComingSoon('Mensagens')}><MessageCircle />Mensagens<span className="soon-badge">Em breve</span></button><button className={active === 'Configurações' ? 'nav-item active' : 'nav-item'} onClick={() => setActive('Configurações')}><Settings2 />Configurações</button></nav><div className="sidebar-bottom"><div className="secure-card"><ShieldCheck /><div><strong>Ambiente seguro</strong><span>Arquivos 3D por URLs assinadas</span></div></div><div className="sidebar-profile sidebar-user"><UserAvatar name={userName} avatarUrl={avatarUrl} className="large-avatar" /><button className="sidebar-user-name" onClick={onProfile}><strong>{userName}</strong><span>{role} · dentform</span></button><button className="more-button" aria-label="Abrir menu do usuário" onClick={() => setUserMenuOpen((open) => !open)}><MoreHorizontal /></button>{userMenuOpen && <div className="user-menu"><button onClick={onProfile}><UserCog />Editar perfil</button><button onClick={onLogout}><LogOut />Sair</button></div>}</div></div></aside>
+  return <aside className="sidebar"><nav className="main-nav sidebar-primary">{navItems.map(({ label, icon: Icon }) => <button key={label} className={active === label ? 'nav-item active' : 'nav-item'} onClick={() => setActive(label)}><Icon />{label}{label === 'Meus Casos' && <span className="nav-count">{orderCount}</span>}</button>)}</nav><div className="sidebar-label">GESTÃO</div><nav className="main-nav"><button className={active === 'Financeiro' ? 'nav-item active' : 'nav-item'} onClick={() => setActive('Financeiro')}><WalletCards />Financeiro</button><button className={active === 'Mensagens' ? 'nav-item active' : 'nav-item'} onClick={() => setActive('Mensagens')}><MessageCircle />Mensagens</button><button className={active === 'Configurações' ? 'nav-item active' : 'nav-item'} onClick={() => setActive('Configurações')}><Settings2 />Configurações</button></nav><div className="sidebar-bottom"><div className="secure-card"><ShieldCheck /><div><strong>Ambiente seguro</strong><span>Arquivos 3D por URLs assinadas</span></div></div><div className="sidebar-profile sidebar-user"><UserAvatar name={userName} avatarUrl={avatarUrl} className="large-avatar" /><button className="sidebar-user-name" onClick={onProfile}><strong>{userName}</strong><span>{role} · dentform</span></button><button className="more-button" aria-label="Abrir menu do usuário" onClick={() => setUserMenuOpen((open) => !open)}><MoreHorizontal /></button>{userMenuOpen && <div className="user-menu"><button onClick={onProfile}><UserCog />Editar perfil</button><button onClick={onLogout}><LogOut />Sair</button></div>}</div></div></aside>
 }
 
 function SimpleModal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -488,7 +488,7 @@ function AttachmentList({ attachments, empty, onInspect, onDownload, onDelete }:
   return <div className="file-checklist">{attachments.length === 0 ? <div className="file-row"><div className="file-status"><FileArchive /></div><div><strong>{empty}</strong><span>Aguardando upload</span></div></div> : attachments.map((attachment) => <div className="file-row" key={attachment.id}><div className={attachment.uploaded ? 'file-status checked' : 'file-status'}>{attachment.stage === 'CAD_DELIVERY' ? <FileCheck2 /> : <FileArchive />}</div><div><strong>{attachment.fileName}</strong><span>{formatFileSize(attachment.size)} · {attachment.uploaded ? 'confirmado' : 'pendente'}</span></div>{(['.stl', '.ply', '.html'].some((extension) => attachment.fileName.toLowerCase().endsWith(extension))) && <button className="attach-button" onClick={() => onInspect(attachment)}>{attachment.fileName.toLowerCase().endsWith('.html') ? 'Webview 3D' : <><ZoomIn />Inspecionar 3D</>}</button>}<button className="remove-file" aria-label="Baixar arquivo" title="Baixar arquivo" onClick={() => onDownload(attachment)}><Download /></button>{onDelete && <button className="remove-file danger" aria-label="Remover arquivo" title="Remover para substituir" onClick={() => onDelete(attachment)}><Trash2 /></button>}</div>)}</div>
 }
 
-function CaseChat({ orderId, currentUserId }: { orderId: number; currentUserId?: number }) {
+function CaseChat({ orderId, currentUserId, showHeading = true }: { orderId: number; currentUserId?: number; showHeading?: boolean }) {
   const [messages, setMessages] = useState<OrderMessage[]>([])
   const [content, setContent] = useState('')
   const [sending, setSending] = useState(false)
@@ -526,7 +526,30 @@ function CaseChat({ orderId, currentUserId }: { orderId: number; currentUserId?:
     }
   }
 
-  return <section className="case-chat"><div className="section-heading compact"><div className="section-number">03</div><div><h2>Mensagens / Chat do Caso</h2><p>Histórico interno entre dentista e cadista</p></div></div><div className="chat-thread">{messages.length === 0 ? <div className="chat-empty">Nenhuma mensagem ainda.</div> : messages.map((message) => { const mine = message.senderId === currentUserId; return <div className={mine ? 'chat-bubble mine' : 'chat-bubble'} key={message.id}><div className="chat-meta"><strong>{mine ? 'Você' : message.senderName}</strong><span>{message.senderRole === 'DESIGNER' ? 'Cadista' : 'Dentista'} · {formatDate(message.createdAt)}</span></div><p>{message.content}</p></div> })}</div>{error && <p className="escrow-note">{error}</p>}<div className="case-chat-composer"><input value={content} onChange={(event) => setContent(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit() } }} placeholder="Escreva uma mensagem..." /><button onClick={submit} disabled={sending || content.trim().length === 0}>Enviar</button></div></section>
+  return <section className="case-chat">{showHeading && <div className="section-heading compact"><div className="section-number">03</div><div><h2>Mensagens / Chat do Caso</h2><p>Histórico interno entre dentista e cadista</p></div></div>}<div className="chat-thread">{messages.length === 0 ? <div className="chat-empty">Nenhuma mensagem ainda.</div> : messages.map((message) => { const mine = message.senderId === currentUserId; return <div className={mine ? 'chat-bubble mine' : 'chat-bubble'} key={message.id}><div className="chat-meta"><strong>{mine ? 'Você' : message.senderName}</strong><span>{message.senderRole === 'DESIGNER' ? 'Cadista' : 'Dentista'} · {formatDate(message.createdAt)}</span></div><p>{message.content}</p></div> })}</div>{error && <p className="escrow-note">{error}</p>}<div className="case-chat-composer"><input value={content} onChange={(event) => setContent(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit() } }} placeholder="Escreva uma mensagem..." /><button onClick={submit} disabled={sending || content.trim().length === 0}>Enviar</button></div></section>
+}
+
+function MessagesPage({ currentUserId, onOpenCase }: { currentUserId?: number; onOpenCase: (orderId: number) => void }) {
+  const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  const loadConversations = async () => {
+    try { setConversations(await getConversations()) } finally { setLoading(false) }
+  }
+
+  useEffect(() => {
+    void loadConversations()
+    const interval = window.setInterval(() => void loadConversations(), 10000)
+    return () => window.clearInterval(interval)
+  }, [])
+
+  const normalizedSearch = search.trim().toLocaleLowerCase('pt-BR')
+  const filtered = conversations.filter((conversation) => !normalizedSearch || [conversation.orderTitle, conversation.patientReference, conversation.otherPartyName].some((value) => value.toLocaleLowerCase('pt-BR').includes(normalizedSearch)))
+  const selected = conversations.find((conversation) => conversation.orderId === selectedId)
+
+  return <div className="page-content messages-page"><div className="page-heading"><div><div className="eyebrow">COMUNICAÇÃO</div><h1>Mensagens</h1><p>Conversas dos seus casos em um só lugar.</p></div></div><section className="messages-layout panel"><aside className="conversation-panel"><div className="conversation-search"><Search /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar caso ou profissional..." /></div><div className="conversation-list">{loading ? <div className="conversation-empty">Carregando conversas...</div> : filtered.length === 0 ? <div className="conversation-empty">Nenhuma conversa encontrada.</div> : filtered.map((conversation) => <button className={selectedId === conversation.orderId ? 'conversation-item active' : 'conversation-item'} key={conversation.orderId} onClick={() => setSelectedId(conversation.orderId)}><UserAvatar name={conversation.otherPartyName} avatarUrl={conversation.otherPartyAvatarUrl} className="conversation-avatar" /><div><div className="conversation-line"><strong>{conversation.otherPartyName}</strong><time>{conversation.lastMessageCreatedAt ? relativeTime(conversation.lastMessageCreatedAt) : ''}</time></div><span>{conversation.orderTitle} · {conversation.patientReference}</span><p>{conversation.lastMessageText}</p></div>{conversation.unreadCount > 0 && <b>{conversation.unreadCount}</b>}</button>)}</div></aside><div className="inbox-thread">{selected ? <><header className="inbox-thread-header"><div><strong>{selected.otherPartyName}</strong><span>{selected.orderTitle} · {selected.patientReference}</span></div><button className="secondary-button" onClick={() => onOpenCase(selected.orderId)}>Ver Caso Completo <ArrowRight /></button></header><CaseChat orderId={selected.orderId} currentUserId={currentUserId} showHeading={false} /></> : <div className="inbox-empty"><MessageCircle /><strong>Selecione uma conversa para visualizar</strong><span>Escolha um caso na lista ao lado.</span></div>}</div></section></div>
 }
 
 function DesignerBoard({ orders, onOpenCase, onApply }: { orders: OrderResponse[]; onOpenCase: (order: OrderResponse) => void; onApply: (order: OrderResponse) => Promise<void> }) {
@@ -550,7 +573,6 @@ export default function OdontoMarketplace() {
   const [usingFallback, setUsingFallback] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<OrderResponse | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
-  const [comingSoon, setComingSoon] = useState<string | null>(null)
 
   const loadOrders = async () => {
     try {
@@ -633,6 +655,8 @@ export default function OdontoMarketplace() {
 
   const screen = active === 'Financeiro'
     ? <FinancialPage role={role} />
+    : active === 'Mensagens'
+    ? <MessagesPage currentUserId={user?.id} onOpenCase={(orderId) => void openNotificationLink(`/orders/${orderId}`)} />
     : active === 'Configurações'
     ? <SettingsPage onLogout={signOut} />
     : active === 'Novo Caso'
@@ -643,5 +667,5 @@ export default function OdontoMarketplace() {
         ? <DesignerBoard orders={orders} onOpenCase={openCase} onApply={handleApply} />
         : <Dashboard orders={orders} usingFallback={usingFallback} onNewCase={() => setActive('Novo Caso')} onOpenCase={openCase} />
 
-  return <div className="app-shell"><Header role={role} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onProfile={() => setProfileOpen(true)} onLogout={signOut} onNotificationLink={(linkUrl) => void openNotificationLink(linkUrl)} /><div className="app-body"><Sidebar active={active} setActive={setActive} role={role} orderCount={orders.length} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onLogout={signOut} onProfile={() => setProfileOpen(true)} onComingSoon={setComingSoon} /><main className="main-area">{screen}</main></div>{profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}{comingSoon && <SimpleModal title={comingSoon} onClose={() => setComingSoon(null)}><div className="coming-soon"><Sparkles /><strong>Em breve</strong><p>Estamos preparando esta área para uma próxima versão.</p><button className="primary-button" onClick={() => setComingSoon(null)}>Entendi</button></div></SimpleModal>}</div>
+  return <div className="app-shell"><Header role={role} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onProfile={() => setProfileOpen(true)} onLogout={signOut} onNotificationLink={(linkUrl) => void openNotificationLink(linkUrl)} /><div className="app-body"><Sidebar active={active} setActive={setActive} role={role} orderCount={orders.length} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onLogout={signOut} onProfile={() => setProfileOpen(true)} /><main className="main-area">{screen}</main></div>{profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}</div>
 }

@@ -214,3 +214,36 @@ button { cursor: pointer; }
 .notification-item time { color: var(--blue); font-size: 8px; }
 .notification-empty { padding: 30px 16px; color: var(--muted); text-align: center; font-size: 10px; }
 @media (max-width: 520px) { .notification-popover { position: fixed; top: 62px; right: 12px; }.role-switcher { display: none; } }
+
+/* unified messages */
+.messages-layout { min-height: 610px; display: grid; grid-template-columns: minmax(280px, 35%) minmax(0, 1fr); overflow: hidden; }
+.conversation-panel { min-width: 0; border-right: 1px solid var(--line); background: var(--surface); }
+.conversation-search { margin: 14px; padding: 0 10px; height: 38px; display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); }
+.conversation-search svg { width: 14px; color: var(--muted); }
+.conversation-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 10px; }
+.conversation-list { max-height: 540px; overflow-y: auto; border-top: 1px solid var(--line); }
+.conversation-item { width: 100%; position: relative; display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 10px; padding: 13px 14px; border: 0; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--ink); text-align: left; }
+.conversation-item:hover, .conversation-item.active { background: var(--blue-soft); }
+.conversation-item.active { box-shadow: inset 3px 0 var(--blue); }
+.conversation-avatar { width: 38px; height: 38px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: #d9e8ff; color: var(--blue); font-size: 10px; font-weight: 800; }
+.conversation-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.conversation-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.conversation-line strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.conversation-line time { color: var(--muted); white-space: nowrap; font-size: 7px; }
+.conversation-item > div > span, .conversation-item p { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-item > div > span { margin-top: 3px; color: var(--blue); font-size: 8px; }
+.conversation-item p { margin: 5px 0 0; color: var(--muted); font-size: 9px; }
+.conversation-item > b { position: absolute; right: 12px; bottom: 10px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 9px; display: grid; place-items: center; background: var(--blue); color: white; font-size: 7px; }
+.conversation-empty { padding: 30px 16px; color: var(--muted); text-align: center; font-size: 10px; }
+.inbox-thread { min-width: 0; display: flex; flex-direction: column; background: #fbfcfe; }
+.inbox-thread-header { min-height: 66px; padding: 11px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.inbox-thread-header strong, .inbox-thread-header span { display: block; }
+.inbox-thread-header strong { font-size: 11px; }
+.inbox-thread-header span { margin-top: 4px; color: var(--muted); font-size: 8px; }
+.inbox-thread .case-chat { flex: 1; padding: 16px 18px; display: flex; flex-direction: column; border: 0; }
+.inbox-thread .chat-thread { flex: 1; max-height: 455px; min-height: 360px; }
+.inbox-empty { flex: 1; display: grid; place-content: center; justify-items: center; gap: 7px; color: var(--muted); text-align: center; }
+.inbox-empty svg { width: 28px; color: var(--blue); }
+.inbox-empty strong { color: var(--ink); font-size: 12px; }
+.inbox-empty span { font-size: 9px; }
+@media (max-width: 800px) { .messages-layout { grid-template-columns: 1fr; }.conversation-panel { border-right: 0; }.conversation-list { max-height: 270px; }.inbox-thread { min-height: 470px; border-top: 1px solid var(--line); }.inbox-thread-header { align-items: flex-start; flex-direction: column; }.inbox-thread .chat-thread { min-height: 280px; } }
