@@ -20,7 +20,7 @@ storage:
     avatar-bucket: profile-avatars
     access-key: minioadmin
     secret-key: minioadmin
-    presigned-url-expiration-minutes: 15
+    presigneq d-url-expiration-minutes: 15
 
 security:
   jwt:

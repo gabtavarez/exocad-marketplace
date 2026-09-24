@@ -25,17 +25,20 @@ public class OrderApplicationService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final OrderService orderService;
+    private final FinancialService financialService;
 
     public OrderApplicationService(
             OrderApplicationRepository applicationRepository,
             OrderRepository orderRepository,
             UserRepository userRepository,
-            OrderService orderService
+            OrderService orderService,
+            FinancialService financialService
     ) {
         this.applicationRepository = applicationRepository;
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
         this.orderService = orderService;
+        this.financialService = financialService;
     }
 
     @Transactional
@@ -95,6 +98,7 @@ public class OrderApplicationService {
         order.setDesignerId(accepted.getDesigner().getId());
         order.setStatus(OrderStatus.IN_PROGRESS);
         orderRepository.save(order);
+        financialService.hold(order);
         return orderService.getById(orderId, currentUser);
     }
 

@@ -40,6 +40,7 @@ import {
 } from 'lucide-react'
 import Clinical3DViewer from '@/components/Clinical3DViewer'
 import { useAuth } from '@/contexts/AuthContext'
+import { getFinancialStatement, getFinancialSummary } from '@/services/financialService'
 import {
   acceptOrderApplication,
   applyToOrder,
@@ -59,6 +60,7 @@ import {
   uploadFileToStorage,
 } from '@/services/orderService'
 import type { AttachmentStage, CreateOrderRequest, OrderApplication, OrderAttachment, OrderMessage, OrderResponse, OrderStatus } from '@/types/order'
+import type { FinancialSummary, WalletTransaction, WalletTransactionType } from '@/types/financial'
 
 type RoleLabel = 'Dentista' | 'Cadista'
 type CaseFile = {
@@ -140,7 +142,7 @@ function Sidebar({ active, setActive, role, orderCount, userName, avatarUrl, onL
     ? [{ label: 'Visão geral', icon: LayoutDashboard }, { label: 'Meus Casos', icon: FileCheck2 }, { label: 'Novo Caso', icon: Plus }]
     : [{ label: 'Visão geral', icon: LayoutDashboard }, { label: 'Meus Casos', icon: FileCheck2 }]
 
-  return <aside className="sidebar"><nav className="main-nav sidebar-primary">{navItems.map(({ label, icon: Icon }) => <button key={label} className={active === label ? 'nav-item active' : 'nav-item'} onClick={() => setActive(label)}><Icon />{label}{label === 'Meus Casos' && <span className="nav-count">{orderCount}</span>}</button>)}</nav><div className="sidebar-label">GESTÃO</div><nav className="main-nav"><button className="nav-item" onClick={() => onComingSoon('Financeiro')}><WalletCards />Financeiro<span className="soon-badge">Em breve</span></button><button className="nav-item" onClick={() => onComingSoon('Mensagens')}><MessageCircle />Mensagens<span className="soon-badge">Em breve</span></button><button className={active === 'Configurações' ? 'nav-item active' : 'nav-item'} onClick={() => setActive('Configurações')}><Settings2 />Configurações</button></nav><div className="sidebar-bottom"><div className="secure-card"><ShieldCheck /><div><strong>Ambiente seguro</strong><span>Arquivos 3D por URLs assinadas</span></div></div><div className="sidebar-profile sidebar-user"><UserAvatar name={userName} avatarUrl={avatarUrl} className="large-avatar" /><button className="sidebar-user-name" onClick={onProfile}><strong>{userName}</strong><span>{role} · dentform</span></button><button className="more-button" aria-label="Abrir menu do usuário" onClick={() => setUserMenuOpen((open) => !open)}><MoreHorizontal /></button>{userMenuOpen && <div className="user-menu"><button onClick={onProfile}><UserCog />Editar perfil</button><button onClick={onLogout}><LogOut />Sair</button></div>}</div></div></aside>
+  return <aside className="sidebar"><nav className="main-nav sidebar-primary">{navItems.map(({ label, icon: Icon }) => <button key={label} className={active === label ? 'nav-item active' : 'nav-item'} onClick={() => setActive(label)}><Icon />{label}{label === 'Meus Casos' && <span className="nav-count">{orderCount}</span>}</button>)}</nav><div className="sidebar-label">GESTÃO</div><nav className="main-nav"><button className={active === 'Financeiro' ? 'nav-item active' : 'nav-item'} onClick={() => setActive('Financeiro')}><WalletCards />Financeiro</button><button className="nav-item" onClick={() => onComingSoon('Mensagens')}><MessageCircle />Mensagens<span className="soon-badge">Em breve</span></button><button className={active === 'Configurações' ? 'nav-item active' : 'nav-item'} onClick={() => setActive('Configurações')}><Settings2 />Configurações</button></nav><div className="sidebar-bottom"><div className="secure-card"><ShieldCheck /><div><strong>Ambiente seguro</strong><span>Arquivos 3D por URLs assinadas</span></div></div><div className="sidebar-profile sidebar-user"><UserAvatar name={userName} avatarUrl={avatarUrl} className="large-avatar" /><button className="sidebar-user-name" onClick={onProfile}><strong>{userName}</strong><span>{role} · dentform</span></button><button className="more-button" aria-label="Abrir menu do usuário" onClick={() => setUserMenuOpen((open) => !open)}><MoreHorizontal /></button>{userMenuOpen && <div className="user-menu"><button onClick={onProfile}><UserCog />Editar perfil</button><button onClick={onLogout}><LogOut />Sair</button></div>}</div></div></aside>
 }
 
 function SimpleModal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -187,6 +189,49 @@ function ProfileEditor({ onSaved, onCancel }: { onSaved?: () => void; onCancel?:
 
 function SettingsPage({ onLogout }: { onLogout: () => void }) {
   return <div className="page-content settings-page"><div className="page-heading"><div><div className="eyebrow">CONTA</div><h1>Configurações</h1><p>Atualize o perfil e gerencie o acesso à sua conta.</p></div></div><div className="settings-grid"><section className="panel settings-panel"><div className="panel-header"><div><h2>Perfil</h2><p>Nome e foto exibidos no marketplace</p></div></div><div className="settings-content"><ProfileEditor /></div></section><section className="panel settings-panel account-panel"><div className="panel-header"><div><h2>Sessão</h2><p>Encerre a sessão para entrar com outra conta</p></div></div><div className="settings-content"><button className="logout-action" onClick={onLogout}><LogOut /><div><strong>Sair da conta</strong><span>Voltar à tela de login para alternar entre Dentista e Cadista</span></div></button></div></section></div></div>
+}
+
+const transactionLabels: Record<WalletTransactionType, string> = {
+  ESCROW_HOLD: 'Custódia garantida',
+  ESCROW_RELEASE: 'Repasse de design 88%',
+  ESCROW_REFUND: 'Estorno de custódia',
+  PLATFORM_FEE: 'Taxa de serviço 12%',
+}
+
+function FinancialPage({ role }: { role: RoleLabel }) {
+  const [summary, setSummary] = useState<FinancialSummary | null>(null)
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    Promise.all([getFinancialSummary(), getFinancialStatement()])
+      .then(([nextSummary, statement]) => { if (active) { setSummary(nextSummary); setTransactions(statement.content) } })
+      .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar o financeiro.') })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  const metrics = role === 'Cadista'
+    ? [
+        ['Saldo Disponível (Liberado)', summary?.availableBalance ?? 0, 'green'],
+        ['Saldo em Custódia (A Receber)', summary?.escrowBalance ?? 0, 'amber'],
+        ['Total Faturado', summary?.totalEarnedOrSpent ?? 0, 'blue'],
+      ] as const
+    : [
+        ['Comprometido em Custódia', summary?.escrowBalance ?? 0, 'amber'],
+        ['Total Investido/Pago', summary?.totalEarnedOrSpent ?? 0, 'blue'],
+        ['Casos Faturados', summary?.invoicedCases ?? 0, 'green'],
+      ] as const
+
+  const amountTone = (type: WalletTransactionType) => {
+    if (type === 'ESCROW_REFUND' || (role === 'Cadista' && type === 'ESCROW_RELEASE')) return 'credit'
+    if (type === 'PLATFORM_FEE' || (role === 'Dentista' && type === 'ESCROW_HOLD')) return 'debit'
+    return 'neutral'
+  }
+
+  return <div className="page-content financial-page"><div className="page-heading"><div><div className="eyebrow">GESTÃO FINANCEIRA</div><h1>Financeiro</h1><p>Acompanhe custódias, repasses e movimentações dos seus casos.</p></div>{role === 'Cadista' && <button className="secondary-button withdrawal-button" disabled title="Disponível na versão final"><CircleDollarSign />Solicitar Saque PIX</button>}</div><div className="financial-metrics">{metrics.map(([label, value, tone]) => <div className="financial-metric" key={label}><div className={`stat-icon ${tone}`}><WalletCards /></div><span>{label}</span><strong>{label === 'Casos Faturados' ? value : formatCurrency(value)}</strong></div>)}</div><section className="panel financial-statement"><div className="panel-header"><div><h2>Extrato de Movimentações</h2><p>Livro-caixa dos lançamentos concluídos</p></div></div>{loading ? <div className="financial-empty">Carregando movimentações...</div> : error ? <div className="financial-empty error">{error}</div> : transactions.length === 0 ? <div className="financial-empty">Nenhuma movimentação financeira registrada.</div> : <div className="statement-scroll"><div className="statement-head"><span>Data/Hora</span><span>Caso</span><span>Tipo/Descrição</span><span>Valor</span></div>{transactions.map((transaction) => <div className="statement-row" key={transaction.id}><span>{new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(transaction.createdAt))}</span><strong>#{String(transaction.orderId).padStart(5, '0')}</strong><span>{transactionLabels[transaction.type]}</span><strong className={amountTone(transaction.type)}>{formatCurrency(transaction.amount)}</strong></div>)}</div>}</section></div>
 }
 
 function StatCard({ icon: Icon, label, value, trend, tone }: { icon: typeof Activity; label: string; value: string; trend: string; tone: string }) {
@@ -515,7 +560,9 @@ export default function OdontoMarketplace() {
     await loadOrders()
   }
 
-  const screen = active === 'Configurações'
+  const screen = active === 'Financeiro'
+    ? <FinancialPage role={role} />
+    : active === 'Configurações'
     ? <SettingsPage onLogout={signOut} />
     : active === 'Novo Caso'
     ? <NewCase onBack={() => setActive('Visão geral')} onSubmit={handleCreateOrder} />

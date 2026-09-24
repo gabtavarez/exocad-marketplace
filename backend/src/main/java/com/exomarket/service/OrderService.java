@@ -28,15 +28,18 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderAttachmentRepository orderAttachmentRepository;
     private final OrderApplicationRepository orderApplicationRepository;
+    private final FinancialService financialService;
 
     public OrderService(
             OrderRepository orderRepository,
             OrderAttachmentRepository orderAttachmentRepository,
-            OrderApplicationRepository orderApplicationRepository
+            OrderApplicationRepository orderApplicationRepository,
+            FinancialService financialService
     ) {
         this.orderRepository = orderRepository;
         this.orderAttachmentRepository = orderAttachmentRepository;
         this.orderApplicationRepository = orderApplicationRepository;
+        this.financialService = financialService;
     }
 
     @Transactional
@@ -112,7 +115,9 @@ public class OrderService {
         if (!hasCadDeliveryStl(id)) {
             throw new IllegalStateException("Cannot approve an order without a CAD delivery STL");
         }
-        return toResponse(orderRepository.save(order), currentUser);
+        Order saved = orderRepository.save(order);
+        financialService.release(saved);
+        return toResponse(saved, currentUser);
     }
 
     @Transactional
