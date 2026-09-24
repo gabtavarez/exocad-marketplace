@@ -5,6 +5,7 @@ import com.exomarket.UserRole;
 import com.exomarket.config.StorageProperties;
 import com.exomarket.domain.Order;
 import com.exomarket.domain.OrderAttachment;
+import com.exomarket.dto.AttachmentDownloadUrlResponse;
 import com.exomarket.dto.CreateUploadUrlRequest;
 import com.exomarket.dto.UploadUrlResponse;
 import com.exomarket.repository.OrderAttachmentRepository;
@@ -83,6 +84,44 @@ public class FileStorageService {
         );
     }
 
+    @Transactional
+    public void completeUpload(Long orderId, Long attachmentId, AuthenticatedUser currentUser) {
+        OrderAttachment attachment = getAttachment(orderId, attachmentId);
+        validateUploadPermission(attachment.getOrder(), attachment.getAttachmentStage(), currentUser);
+        attachment.setUploaded(true);
+        attachmentRepository.save(attachment);
+    }
+
+    @Transactional(readOnly = true)
+    public AttachmentDownloadUrlResponse createDownloadUrl(
+            Long orderId,
+            Long attachmentId,
+            AuthenticatedUser currentUser
+    ) {
+        OrderAttachment attachment = getAttachment(orderId, attachmentId);
+        validateDownloadPermission(attachment.getOrder(), currentUser);
+
+        OffsetDateTime expiresAt = OffsetDateTime.now(ZoneOffset.UTC)
+                .plusMinutes(storageProperties.presignedUrlExpirationMinutes());
+
+        return new AttachmentDownloadUrlResponse(
+                attachment.getId(),
+                buildPresignedGetUrl(attachment.getStoragePath(), expiresAt),
+                expiresAt
+        );
+    }
+
+    private OrderAttachment getAttachment(Long orderId, Long attachmentId) {
+        OrderAttachment attachment = attachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> new EntityNotFoundException("Attachment not found: " + attachmentId));
+
+        if (!attachment.getOrder().getId().equals(orderId)) {
+            throw new EntityNotFoundException("Attachment not found: " + attachmentId);
+        }
+
+        return attachment;
+    }
+
     private void validateUploadPermission(
             Order order,
             AttachmentStage attachmentStage,
@@ -94,6 +133,17 @@ public class FileStorageService {
 
         if (!allowed) {
             throw new AccessDeniedException("User cannot upload this attachment type for the order");
+        }
+    }
+
+    private void validateDownloadPermission(Order order, AuthenticatedUser currentUser) {
+        boolean allowed = currentUser.role() == UserRole.DENTIST
+                ? currentUser.id().equals(order.getUserId())
+                : order.getStatus() == com.exomarket.OrderStatus.OPEN
+                        || currentUser.id().equals(order.getDesignerId());
+
+        if (!allowed) {
+            throw new AccessDeniedException("User cannot download attachments for the order");
         }
     }
 
@@ -113,6 +163,14 @@ public class FileStorageService {
     }
 
     private String buildPresignedPutUrl(String storagePath, String mimeType, OffsetDateTime expiresAt) {
+        return buildPresignedUrl("PUT", storagePath, mimeType, expiresAt);
+    }
+
+    private String buildPresignedGetUrl(String storagePath, OffsetDateTime expiresAt) {
+        return buildPresignedUrl("GET", storagePath, null, expiresAt);
+    }
+
+    private String buildPresignedUrl(String method, String storagePath, String mimeType, OffsetDateTime expiresAt) {
         URI endpoint = URI.create(storageProperties.publicEndpoint());
         String host = endpoint.getHost() + (endpoint.getPort() > -1 ? ":" + endpoint.getPort() : "");
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
@@ -122,17 +180,22 @@ public class FileStorageService {
         long expiresInSeconds = Math.max(1, expiresAt.toEpochSecond() - now.toEpochSecond());
         String credential = storageProperties.accessKey() + "/" + scope;
         String canonicalUri = "/" + storageProperties.bucket() + "/" + encodePath(storagePath);
+        String signedHeaders = "GET".equals(method) ? "host" : "content-type%3Bhost";
 
-        String canonicalQueryString = "X-Amz-Algorithm=%s&X-Amz-Credential=%s&X-Amz-Date=%s&X-Amz-Expires=%d&X-Amz-SignedHeaders=content-type%%3Bhost"
+        String canonicalQueryString = "X-Amz-Algorithm=%s&X-Amz-Credential=%s&X-Amz-Date=%s&X-Amz-Expires=%d&X-Amz-SignedHeaders=%s"
                 .formatted(
                         ALGORITHM,
                         encodeQuery(credential),
                         amzDate,
-                        expiresInSeconds
+                        expiresInSeconds,
+                        signedHeaders
                 );
-        String canonicalHeaders = "content-type:%s\nhost:%s\n".formatted(mimeType, host);
-        String canonicalRequest = "PUT\n%s\n%s\n%s\ncontent-type;host\nUNSIGNED-PAYLOAD"
-                .formatted(canonicalUri, canonicalQueryString, canonicalHeaders);
+        String canonicalHeaders = "GET".equals(method)
+                ? "host:%s\n".formatted(host)
+                : "content-type:%s\nhost:%s\n".formatted(mimeType, host);
+        String canonicalSignedHeaders = "GET".equals(method) ? "host" : "content-type;host";
+        String canonicalRequest = "%s\n%s\n%s\n%s\n%s\nUNSIGNED-PAYLOAD"
+                .formatted(method, canonicalUri, canonicalQueryString, canonicalHeaders, canonicalSignedHeaders);
         String stringToSign = "%s\n%s\n%s\n%s"
                 .formatted(ALGORITHM, amzDate, scope, sha256Hex(canonicalRequest));
         String signature = hmacSha256Hex(getSignatureKey(storageProperties.secretKey(), dateStamp), stringToSign);

@@ -1,4 +1,4 @@
-import type { CreateOrderRequest, CreateUploadUrlRequest, OrderResponse, OrderStatus, UploadUrlResponse } from '@/types/order'
+import type { AttachmentDownloadUrlResponse, CreateOrderRequest, CreateUploadUrlRequest, OrderResponse, OrderStatus, UploadUrlResponse } from '@/types/order'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080'
 const TOKEN_KEY = 'exomarket.auth.token'
@@ -15,7 +15,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   })
 
   if (!response.ok) {
-    throw new Error(`API request failed with status ${response.status}`)
+    const payload = await response.json().catch(() => null) as { message?: string } | null
+    throw new Error(payload?.message ?? `API request failed with status ${response.status}`)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
   }
 
   return response.json() as Promise<T>
@@ -73,6 +78,16 @@ export function createUploadUrl(orderId: string | number, data: CreateUploadUrlR
     method: 'POST',
     body: JSON.stringify(data),
   })
+}
+
+export function completeAttachmentUpload(orderId: string | number, attachmentId: string | number): Promise<void> {
+  return request<void>(`/api/orders/${orderId}/attachments/${attachmentId}/complete`, {
+    method: 'POST',
+  })
+}
+
+export function getAttachmentDownloadUrl(orderId: string | number, attachmentId: string | number): Promise<AttachmentDownloadUrlResponse> {
+  return request<AttachmentDownloadUrlResponse>(`/api/orders/${orderId}/attachments/${attachmentId}/download-url`)
 }
 
 export async function uploadFileToStorage(uploadUrl: string, file: File): Promise<void> {

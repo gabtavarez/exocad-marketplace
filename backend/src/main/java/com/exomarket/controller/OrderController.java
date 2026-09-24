@@ -1,6 +1,7 @@
 package com.exomarket.controller;
 
 import com.exomarket.OrderStatus;
+import com.exomarket.dto.AttachmentDownloadUrlResponse;
 import com.exomarket.dto.CreateOrderRequest;
 import com.exomarket.dto.CreateUploadUrlRequest;
 import com.exomarket.dto.OrderResponse;
@@ -89,5 +90,24 @@ public class OrderController {
             @AuthenticationPrincipal AuthenticatedUser currentUser
     ) {
         return fileStorageService.createUploadUrl(orderId, request, currentUser);
+    }
+
+    @PostMapping("/{orderId}/attachments/{attachmentId}/complete")
+    public ResponseEntity<Void> completeUpload(
+            @PathVariable Long orderId,
+            @PathVariable Long attachmentId,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ) {
+        fileStorageService.completeUpload(orderId, attachmentId, currentUser);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{orderId}/attachments/{attachmentId}/download-url")
+    public AttachmentDownloadUrlResponse createDownloadUrl(
+            @PathVariable Long orderId,
+            @PathVariable Long attachmentId,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ) {
+        return fileStorageService.createDownloadUrl(orderId, attachmentId, currentUser);
     }
 }

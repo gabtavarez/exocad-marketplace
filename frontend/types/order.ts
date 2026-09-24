@@ -31,6 +31,8 @@ export type OrderResponse = {
   createdAt?: string
   updatedAt?: string
   items: OrderItemResponse[]
+  attachments: OrderAttachment[]
+  revisionFeedback?: string
 }
 
 export type CreateUploadUrlRequest = {
@@ -53,6 +55,14 @@ export type OrderAttachment = {
   size: number
   stage: AttachmentStage
   mimeType?: string
+  uploaded?: boolean
+  createdAt?: string
   downloadUrl?: string
   viewerUrl?: string
+}
+
+export type AttachmentDownloadUrlResponse = {
+  attachmentId: number
+  downloadUrl: string
+  expiresAt: string
 }

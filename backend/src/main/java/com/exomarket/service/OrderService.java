@@ -4,6 +4,7 @@ import com.exomarket.AttachmentStage;
 import com.exomarket.OrderStatus;
 import com.exomarket.UserRole;
 import com.exomarket.domain.Order;
+import com.exomarket.domain.OrderAttachment;
 import com.exomarket.domain.OrderItem;
 import com.exomarket.dto.CreateOrderRequest;
 import com.exomarket.dto.OrderResponse;
@@ -63,13 +64,11 @@ public class OrderService {
                     : orderRepository.findByUserIdAndStatus(currentUser.id(), status);
         } else if (status == null) {
             orders = new ArrayList<>(orderRepository.findByStatus(OrderStatus.OPEN));
-            orders.addAll(orderRepository.findByDesignerIdAndStatus(currentUser.id(), OrderStatus.IN_PROGRESS));
+            orders.addAll(orderRepository.findByDesignerId(currentUser.id()));
         } else if (status == OrderStatus.OPEN) {
             orders = orderRepository.findByStatus(OrderStatus.OPEN);
-        } else if (status == OrderStatus.IN_PROGRESS) {
-            orders = orderRepository.findByDesignerIdAndStatus(currentUser.id(), OrderStatus.IN_PROGRESS);
         } else {
-            orders = List.of();
+            orders = orderRepository.findByDesignerIdAndStatus(currentUser.id(), status);
         }
 
         return orders.stream().map(this::toResponse).toList();
@@ -96,7 +95,10 @@ public class OrderService {
         requireRole(currentUser, UserRole.DESIGNER);
         Order order = getOrderOrThrow(id);
         requireDesigner(order, currentUser);
-        transition(order, OrderStatus.IN_PROGRESS, OrderStatus.IN_REVIEW);
+        if (order.getStatus() != OrderStatus.IN_PROGRESS && order.getStatus() != OrderStatus.REVISION_REQUESTED) {
+            throw new IllegalStateException("Invalid status transition from " + order.getStatus() + " to " + OrderStatus.IN_REVIEW);
+        }
+        order.setStatus(OrderStatus.IN_REVIEW);
         if (!hasCadDeliveryStl(id)) {
             throw new IllegalStateException("Cannot submit delivery without a CAD delivery STL");
         }
@@ -192,6 +194,8 @@ public class OrderService {
     }
 
     private OrderResponse toResponse(Order order) {
+        List<OrderAttachment> attachments = orderAttachmentRepository.findByOrderIdOrderByCreatedAtAsc(order.getId());
+
         return new OrderResponse(
                 order.getId(),
                 order.getUserId(),
@@ -206,7 +210,19 @@ public class OrderService {
                         .map(item -> new OrderResponse.OrderItemResponse(
                                 item.getId(), item.getToothNumber(), item.getServiceType(), item.getNotes()
                         ))
-                        .toList()
+                        .toList(),
+                attachments.stream()
+                        .map(attachment -> new OrderResponse.OrderAttachmentResponse(
+                                attachment.getId(),
+                                attachment.getOriginalFileName(),
+                                attachment.getFileSize(),
+                                attachment.getAttachmentStage(),
+                                attachment.getMimeType(),
+                                attachment.getUploaded(),
+                                attachment.getCreatedAt()
+                        ))
+                        .toList(),
+                order.getRevisionFeedback()
         );
     }
 }
