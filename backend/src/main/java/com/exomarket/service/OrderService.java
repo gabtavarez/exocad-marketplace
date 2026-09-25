@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -116,10 +117,10 @@ public class OrderService {
         return toResponse(saved, currentUser);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public OrderResponse approve(Long id, AuthenticatedUser currentUser) {
         requireRole(currentUser, UserRole.DENTIST);
-        Order order = getOrderOrThrow(id);
+        Order order = getOrderForUpdateOrThrow(id);
         requireOwner(order, currentUser);
         transition(order, OrderStatus.IN_REVIEW, OrderStatus.COMPLETED);
         if (!hasCadDeliveryStl(id)) {
@@ -148,6 +149,11 @@ public class OrderService {
 
     private Order getOrderOrThrow(Long id) {
         return orderRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
+    }
+
+    private Order getOrderForUpdateOrThrow(Long id) {
+        return orderRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
     }
 

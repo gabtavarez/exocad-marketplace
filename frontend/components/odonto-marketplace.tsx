@@ -191,8 +191,13 @@ function NotificationBell({ onOpenLink }: { onOpenLink: (linkUrl?: string) => vo
   return <div className="notification-center"><button className="notification-button" aria-label="Notificações" aria-expanded={open} onClick={() => void toggle()}><Bell />{unreadCount > 0 && <span className="notification-count">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button>{open && <div className="notification-popover"><div className="notification-heading"><strong>Notificações</strong><button onClick={() => void markAll()} disabled={unreadCount === 0}>Marcar todas como lidas</button></div><div className="notification-list">{loading ? <div className="notification-empty">Carregando...</div> : notifications.length === 0 ? <div className="notification-empty">Nenhuma notificação no momento</div> : notifications.map((notification) => <button className={notification.read ? 'notification-item' : 'notification-item unread'} key={notification.id} onClick={() => void openNotification(notification)}><span className="unread-indicator"/><div><strong>{notification.title}</strong><p>{notification.message}</p><time>{relativeTime(notification.createdAt)}</time></div></button>)}</div></div>}</div>
 }
 
-function Header({ role, userName, avatarUrl, onProfile, onLogout, onNotificationLink }: { role: RoleLabel; userName: string; avatarUrl?: string; onProfile: () => void; onLogout: () => void; onNotificationLink: (linkUrl?: string) => void }) {
-  return <header className="topbar"><div className="topbar-left"><button className="mobile-menu" aria-label="Abrir menu"><PanelLeft /></button><Brand /></div><div className="topbar-actions"><div className="role-switcher" aria-label="Perfil autenticado"><button className="active" type="button">{role === 'Dentista' ? <UserRound /> : <UsersRound />}{role}</button></div><NotificationBell onOpenLink={onNotificationLink} /><button className="profile-trigger" onClick={onProfile} title="Editar perfil"><UserAvatar name={userName} avatarUrl={avatarUrl} className="profile-avatar" /><strong>{userName}</strong></button><button className="icon-button logout-button" aria-label="Sair" title="Sair e trocar de conta" onClick={onLogout}><LogOut /></button></div></header>
+function Header({ role, viewRole, userName, avatarUrl, onProfile, onLogout, onNotificationLink, onViewRoleChange }: { role: RoleLabel; viewRole: RoleLabel; userName: string; avatarUrl?: string; onProfile: () => void; onLogout: () => void; onNotificationLink: (linkUrl?: string) => void; onViewRoleChange: (role: RoleLabel) => void }) {
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false)
+  const chooseRole = (nextRole: RoleLabel) => {
+    onViewRoleChange(nextRole)
+    setRoleMenuOpen(false)
+  }
+  return <header className="topbar"><div className="topbar-left"><button className="mobile-menu" aria-label="Abrir menu"><PanelLeft /></button><Brand /></div><div className="topbar-actions"><div className="role-switcher role-dropdown" aria-label="Selecionar painel"><button className="active" type="button" onClick={() => setRoleMenuOpen((open) => !open)}>{viewRole === 'Dentista' ? <UserRound /> : <UsersRound />}{viewRole}<ChevronDown /></button>{roleMenuOpen && <div className="role-menu"><button type="button" className={viewRole === 'Dentista' ? 'selected' : ''} onClick={() => chooseRole('Dentista')}><UserRound />Painel Dentista</button><button type="button" className={viewRole === 'Cadista' ? 'selected' : ''} onClick={() => chooseRole('Cadista')}><UsersRound />Painel Cadista</button><span>Login atual: {role}</span></div>}</div><NotificationBell onOpenLink={onNotificationLink} /><button className="profile-trigger" onClick={onProfile} title="Editar perfil"><UserAvatar name={userName} avatarUrl={avatarUrl} className="profile-avatar" /><strong>{userName}</strong></button><button className="icon-button logout-button" aria-label="Sair" title="Sair e trocar de conta" onClick={onLogout}><LogOut /></button></div></header>
 }
 
 function Sidebar({ active, setActive, role, orderCount, userName, avatarUrl, onLogout, onProfile }: { active: string; setActive: (label: string) => void; role: RoleLabel; orderCount: number; userName: string; avatarUrl?: string; onLogout: () => void; onProfile: () => void }) {
@@ -297,6 +302,8 @@ function StatCard({ icon: Icon, label, value, trend, tone }: { icon: typeof Acti
   return <div className="stat-card"><div className={`stat-icon ${tone}`}><Icon /></div><div><span className="eyebrow">{label}</span><div className="stat-value">{value}</div><span className="stat-trend">{trend}</span></div></div>
 }
 
+const formatCaseCount = (count: number) => String(count)
+
 function CaseFileUpload({ files, onFilesChange, stage, acceptedExtensions, helperText }: { files: CaseFile[]; onFilesChange: (files: CaseFile[]) => void; stage: AttachmentStage; acceptedExtensions: string[]; helperText: string }) {
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -312,7 +319,12 @@ function CaseFileUpload({ files, onFilesChange, stage, acceptedExtensions, helpe
 }
 
 function Dashboard({ orders, usingFallback, onNewCase, onOpenCase }: { orders: OrderResponse[]; usingFallback: boolean; onNewCase: () => void; onOpenCase: (order: OrderResponse) => void }) {
-  return <div className="page-content"><div className="page-heading"><div><div className="eyebrow">PAINEL DO DENTISTA</div><h1>Meus Casos</h1><p>Acompanhe seus casos clínicos e aprove entregas CAD.</p></div><button className="primary-button" onClick={onNewCase}><Plus />Novo Caso</button></div><div className="stats-grid"><StatCard icon={Activity} label="Casos ativos" value={String(orders.filter((order) => order.status !== 'COMPLETED').length).padStart(2, '0')} trend="Sincronizado com a API" tone="blue"/><StatCard icon={Clock3} label="Aguardando aprovação" value={String(orders.filter((order) => order.status === 'IN_REVIEW').length).padStart(2, '0')} trend="Revisar 3D" tone="amber"/><StatCard icon={CircleDollarSign} label="Último valor" value={orders[0] ? formatCurrency(orders[0].totalAmount) : 'R$ 0,00'} trend="Caso mais recente" tone="green"/><StatCard icon={PackageCheck} label="Concluídos" value={String(orders.filter((order) => order.status === 'COMPLETED').length).padStart(2, '0')} trend="Total aprovado" tone="violet"/></div><section className="panel orders-panel"><div className="panel-header"><div><h2>Lista de Casos</h2><p>{usingFallback ? 'Sem conexão com a API. Exibindo lista vazia segura.' : 'Casos carregados da API'}</p></div></div><div className="filter-row"><div className="search-box"><Search /><input placeholder="Buscar por paciente ou caso..." /></div><button className="filter-button">Todos os status <ChevronDown /></button></div><OrderList orders={orders} onOpenCase={onOpenCase} /></section></div>
+  const recentOrders = orders.slice(0, 5)
+  return <div className="page-content"><div className="page-heading"><div><div className="eyebrow">PAINEL DO DENTISTA</div><h1>Visão geral</h1><p>Acompanhe seus indicadores clínicos e entregas CAD.</p></div><button className="primary-button" onClick={onNewCase}><Plus />Novo Caso</button></div><div className="stats-grid"><StatCard icon={Activity} label="Casos ativos" value={formatCaseCount(orders.filter((order) => order.status !== 'COMPLETED').length)} trend="Sincronizado com a API" tone="blue"/><StatCard icon={Clock3} label="Aguardando aprovação" value={formatCaseCount(orders.filter((order) => order.status === 'IN_REVIEW').length)} trend="Revisar 3D" tone="amber"/><StatCard icon={CircleDollarSign} label="Último valor" value={orders[0] ? formatCurrency(orders[0].totalAmount) : 'R$ 0,00'} trend="Caso mais recente" tone="green"/><StatCard icon={PackageCheck} label="Concluídos" value={formatCaseCount(orders.filter((order) => order.status === 'COMPLETED').length)} trend="Total aprovado" tone="violet"/></div><section className="panel orders-panel"><div className="panel-header"><div><h2>Casos recentes</h2><p>{usingFallback ? 'Sem conexão com a API. Exibindo lista vazia segura.' : 'Últimos casos carregados da API'}</p></div></div><OrderList orders={recentOrders} onOpenCase={onOpenCase} /></section></div>
+}
+
+function CasesPage({ orders, usingFallback, onOpenCase }: { orders: OrderResponse[]; usingFallback: boolean; onOpenCase: (order: OrderResponse) => void }) {
+  return <div className="page-content"><div className="page-heading"><div><div className="eyebrow">LISTA DE CASOS</div><h1>Meus Casos</h1><p>Consulte e abra os detalhes dos seus casos.</p></div></div><section className="panel orders-panel"><div className="panel-header"><div><h2>Lista de Casos</h2><p>{usingFallback ? 'Sem conexão com a API. Exibindo lista vazia segura.' : 'Casos carregados da API'}</p></div></div><div className="filter-row"><div className="search-box"><Search /><input placeholder="Buscar por paciente ou caso..." /></div><button className="filter-button">Todos os status <ChevronDown /></button></div><OrderList orders={orders} onOpenCase={onOpenCase} /></section></div>
 }
 
 function OrderList({ orders, onOpenCase }: { orders: OrderResponse[]; onOpenCase: (order: OrderResponse) => void }) {
@@ -568,6 +580,7 @@ function DesignerBoard({ orders, onOpenCase, onApply }: { orders: OrderResponse[
 export default function OdontoMarketplace() {
   const { user, signOut } = useAuth()
   const role: RoleLabel = user?.role === 'DESIGNER' ? 'Cadista' : 'Dentista'
+  const [viewRole, setViewRole] = useState<RoleLabel>(role)
   const [active, setActive] = useState('Visão geral')
   const [orders, setOrders] = useState<OrderResponse[]>([])
   const [usingFallback, setUsingFallback] = useState(false)
@@ -592,10 +605,22 @@ export default function OdontoMarketplace() {
   }, [user?.id, user?.role])
 
   useEffect(() => {
-    if (role === 'Cadista' && active === 'Novo Caso') {
+    setViewRole(role)
+    setActive('Visão geral')
+    setSelectedOrder(null)
+  }, [role])
+
+  useEffect(() => {
+    if (viewRole === 'Cadista' && active === 'Novo Caso') {
       setActive('Visão geral')
     }
-  }, [active, role])
+  }, [active, viewRole])
+
+  const changeViewRole = (nextRole: RoleLabel) => {
+    setViewRole(nextRole)
+    setSelectedOrder(null)
+    setActive('Visão geral')
+  }
 
   const refreshOrder = async (id: number) => {
     const updated = await getOrderById(String(id))
@@ -663,9 +688,11 @@ export default function OdontoMarketplace() {
     ? <NewCase onBack={() => setActive('Visão geral')} onSubmit={handleCreateOrder} />
     : active === 'Meus Casos' && selectedOrder
       ? <ReviewWorkspace order={selectedOrder} role={role} currentUserId={user?.id} onBack={() => { setSelectedOrder(null); setActive('Visão geral') }} onRefresh={refreshOrder} />
-      : role === 'Cadista'
+    : active === 'Meus Casos'
+      ? <CasesPage orders={orders} usingFallback={usingFallback} onOpenCase={openCase} />
+      : viewRole === 'Cadista'
         ? <DesignerBoard orders={orders} onOpenCase={openCase} onApply={handleApply} />
         : <Dashboard orders={orders} usingFallback={usingFallback} onNewCase={() => setActive('Novo Caso')} onOpenCase={openCase} />
 
-  return <div className="app-shell"><Header role={role} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onProfile={() => setProfileOpen(true)} onLogout={signOut} onNotificationLink={(linkUrl) => void openNotificationLink(linkUrl)} /><div className="app-body"><Sidebar active={active} setActive={setActive} role={role} orderCount={orders.length} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onLogout={signOut} onProfile={() => setProfileOpen(true)} /><main className="main-area">{screen}</main></div>{profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}</div>
+  return <div className="app-shell"><Header role={role} viewRole={viewRole} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onProfile={() => setProfileOpen(true)} onLogout={signOut} onNotificationLink={(linkUrl) => void openNotificationLink(linkUrl)} onViewRoleChange={changeViewRole} /><div className="app-body"><Sidebar active={active} setActive={setActive} role={viewRole} orderCount={orders.length} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onLogout={signOut} onProfile={() => setProfileOpen(true)} /><main className="main-area">{screen}</main></div>{profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}</div>
 }

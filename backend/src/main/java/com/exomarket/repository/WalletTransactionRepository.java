@@ -8,12 +8,24 @@ import java.util.Collection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface WalletTransactionRepository extends JpaRepository<WalletTransaction, Long> {
 
-    boolean existsByOrderIdAndType(Long orderId, WalletTransactionType type);
+    @Modifying
+    @Query(value = """
+            insert into wallet_transactions (order_id, user_id, type, amount, status)
+            values (:orderId, :userId, :type, :amount, 'COMPLETED')
+            on conflict on constraint uk_wallet_transactions_order_type do nothing
+            """, nativeQuery = true)
+    int insertIfAbsent(
+            @Param("orderId") Long orderId,
+            @Param("userId") Long userId,
+            @Param("type") String type,
+            @Param("amount") BigDecimal amount
+    );
 
     @Query("""
             select transaction from WalletTransaction transaction

@@ -13,6 +13,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import lombok.Getter;
@@ -21,7 +22,13 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "wallet_transactions")
+@Table(
+        name = "wallet_transactions",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_wallet_transactions_order_type",
+                columnNames = {"order_id", "type"}
+        )
+)
 public class WalletTransaction {
 
     @Id

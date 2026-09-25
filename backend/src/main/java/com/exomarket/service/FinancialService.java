@@ -2,10 +2,8 @@ package com.exomarket.service;
 
 import com.exomarket.OrderStatus;
 import com.exomarket.UserRole;
-import com.exomarket.WalletTransactionStatus;
 import com.exomarket.WalletTransactionType;
 import com.exomarket.domain.Order;
-import com.exomarket.domain.User;
 import com.exomarket.domain.WalletTransaction;
 import com.exomarket.dto.FinancialSummaryResponse;
 import com.exomarket.dto.WalletTransactionResponse;
@@ -25,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class FinancialService {
 
     private static final BigDecimal DESIGNER_SHARE = new BigDecimal("0.88");
-    private static final BigDecimal PLATFORM_SHARE = new BigDecimal("0.12");
     private static final List<OrderStatus> ESCROW_STATUSES = List.of(
             OrderStatus.IN_PROGRESS,
             OrderStatus.IN_REVIEW,
@@ -50,10 +47,11 @@ public class FinancialService {
         if (order.getDesignerId() == null) {
             throw new IllegalStateException("Cannot release escrow without an assigned designer");
         }
-        createOnce(order, order.getDesignerId(), WalletTransactionType.ESCROW_RELEASE,
-                percentage(order.getTotalAmount(), DESIGNER_SHARE));
-        createOnce(order, order.getDesignerId(), WalletTransactionType.PLATFORM_FEE,
-                percentage(order.getTotalAmount(), PLATFORM_SHARE));
+        BigDecimal total = money(order.getTotalAmount());
+        BigDecimal designerAmount = percentage(total, DESIGNER_SHARE);
+        BigDecimal platformFee = total.subtract(designerAmount).setScale(2, RoundingMode.HALF_EVEN);
+        createOnce(order, order.getDesignerId(), WalletTransactionType.ESCROW_RELEASE, designerAmount);
+        createOnce(order, order.getDesignerId(), WalletTransactionType.PLATFORM_FEE, platformFee);
     }
 
     @Transactional
@@ -90,18 +88,9 @@ public class FinancialService {
     }
 
     private void createOnce(Order order, Long userId, WalletTransactionType type, BigDecimal amount) {
-        if (transactionRepository.existsByOrderIdAndType(order.getId(), type)) {
-            return;
-        }
-        User user = userRepository.findById(userId)
+        userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
-        WalletTransaction transaction = new WalletTransaction();
-        transaction.setOrder(order);
-        transaction.setUser(user);
-        transaction.setType(type);
-        transaction.setAmount(money(amount));
-        transaction.setStatus(WalletTransactionStatus.COMPLETED);
-        transactionRepository.save(transaction);
+        transactionRepository.insertIfAbsent(order.getId(), userId, type.name(), money(amount));
     }
 
     private BigDecimal sum(Long userId, WalletTransactionType type) {
@@ -109,11 +98,11 @@ public class FinancialService {
     }
 
     private BigDecimal percentage(BigDecimal amount, BigDecimal rate) {
-        return amount.multiply(rate).setScale(2, RoundingMode.HALF_UP);
+        return amount.multiply(rate).setScale(2, RoundingMode.HALF_EVEN);
     }
 
     private BigDecimal money(BigDecimal amount) {
-        return amount.setScale(2, RoundingMode.HALF_UP);
+        return amount.setScale(2, RoundingMode.HALF_EVEN);
     }
 
     private WalletTransactionResponse toResponse(WalletTransaction transaction) {

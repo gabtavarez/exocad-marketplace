@@ -16,6 +16,7 @@ import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -82,7 +83,7 @@ public class OrderApplicationService {
                 .toList();
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public OrderResponse accept(Long orderId, Long applicationId, AuthenticatedUser currentUser) {
         requireRole(currentUser, UserRole.DENTIST);
         Order order = orderRepository.findByIdForUpdate(orderId)
