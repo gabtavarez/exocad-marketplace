@@ -1,6 +1,6 @@
 import type { AuthResponse, AuthUser, RegisterRequest, UserRole } from '@/types/auth'
+import { API_BASE_URL } from '@/services/apiConfig'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080'
 const TOKEN_KEY = 'exomarket.auth.token'
 
 type AvatarUploadUrlResponse = {

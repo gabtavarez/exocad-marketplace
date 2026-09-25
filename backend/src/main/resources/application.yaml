@@ -6,21 +6,30 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:postgres_password}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_MAX_POOL_SIZE:5}
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+  flyway:
+    enabled: true
 
 storage:
   s3:
-    endpoint: http://localhost:9000
-    public-endpoint: http://localhost:9000
-    region: us-east-1
-    bucket: exocad-cases
-    avatar-bucket: profile-avatars
-    access-key: minioadmin
-    secret-key: minioadmin
-    presigneq d-url-expiration-minutes: 15
+    endpoint: ${AWS_ENDPOINT_URL:http://localhost:9000}
+    public-endpoint: ${AWS_PUBLIC_ENDPOINT_URL:${AWS_ENDPOINT_URL:http://localhost:9000}}
+    region: ${AWS_REGION:us-east-1}
+    bucket: ${AWS_BUCKET_NAME:exocad-cases}
+    avatar-bucket: ${AWS_AVATAR_BUCKET_NAME:profile-avatars}
+    access-key: ${AWS_ACCESS_KEY_ID:minioadmin}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:minioadmin}
+    path-style-access: ${AWS_S3_PATH_STYLE_ACCESS:true}
+    presigned-url-expiration-minutes: ${AWS_PRESIGNED_URL_EXPIRATION_MINUTES:15}
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
 
 security:
   jwt:

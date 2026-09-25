@@ -1,6 +1,6 @@
 import type { AttachmentDownloadUrlResponse, ConversationSummary, CreateOrderRequest, CreateUploadUrlRequest, OrderApplication, OrderMessage, OrderResponse, OrderStatus, UploadUrlResponse } from '@/types/order'
+import { API_BASE_URL } from '@/services/apiConfig'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080'
 const TOKEN_KEY = 'exomarket.auth.token'
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {

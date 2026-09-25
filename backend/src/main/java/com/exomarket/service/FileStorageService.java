@@ -103,11 +103,14 @@ public class FileStorageService {
                 storageProperties.avatarBucket(), storagePath, request.mimeType(), expiresAt
         );
         URI publicEndpoint = URI.create(storageProperties.publicEndpoint());
-        String host = publicEndpoint.getHost()
-                + (publicEndpoint.getPort() > -1 ? ":" + publicEndpoint.getPort() : "");
-        String publicUrl = "%s://%s/%s/%s".formatted(
-                publicEndpoint.getScheme(), host, storageProperties.avatarBucket(), encodePath(storagePath)
-        );
+        String endpointHost = endpointHost(publicEndpoint);
+        String publicUrl = storageProperties.pathStyleAccess()
+                ? "%s://%s/%s/%s".formatted(
+                        publicEndpoint.getScheme(), endpointHost, storageProperties.avatarBucket(), encodePath(storagePath)
+                )
+                : "%s://%s.%s/%s".formatted(
+                        publicEndpoint.getScheme(), storageProperties.avatarBucket(), endpointHost, encodePath(storagePath)
+                );
         return new AvatarUploadUrlResponse(uploadUrl, publicUrl, expiresAt);
     }
 
@@ -297,14 +300,19 @@ public class FileStorageService {
             Map<String, String> extraQueryParameters
     ) {
         URI endpoint = URI.create(endpointValue);
-        String host = endpoint.getHost() + (endpoint.getPort() > -1 ? ":" + endpoint.getPort() : "");
+        String endpointHost = endpointHost(endpoint);
+        String host = storageProperties.pathStyleAccess()
+                ? endpointHost
+                : bucket + "." + endpointHost;
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         String amzDate = now.format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"));
         String dateStamp = now.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String scope = "%s/%s/%s/aws4_request".formatted(dateStamp, storageProperties.region(), SERVICE);
         long expiresInSeconds = Math.max(1, expiresAt.toEpochSecond() - now.toEpochSecond());
         String credential = storageProperties.accessKey() + "/" + scope;
-        String canonicalUri = "/" + bucket + "/" + encodePath(storagePath);
+        String canonicalUri = storageProperties.pathStyleAccess()
+                ? "/" + bucket + "/" + encodePath(storagePath)
+                : "/" + encodePath(storagePath);
         Map<String, String> queryParameters = new TreeMap<>();
         queryParameters.put("X-Amz-Algorithm", ALGORITHM);
         queryParameters.put("X-Amz-Credential", credential);
@@ -366,6 +374,10 @@ public class FileStorageService {
                 .map(this::encodeQuery)
                 .reduce((left, right) -> left + "/" + right)
                 .orElse("");
+    }
+
+    private String endpointHost(URI endpoint) {
+        return endpoint.getHost() + (endpoint.getPort() > -1 ? ":" + endpoint.getPort() : "");
     }
 
     private String encodeQuery(String value) {

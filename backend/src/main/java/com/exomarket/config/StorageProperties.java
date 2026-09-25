@@ -11,6 +11,7 @@ public record StorageProperties(
         String avatarBucket,
         String accessKey,
         String secretKey,
+        boolean pathStyleAccess,
         int presignedUrlExpirationMinutes
 ) {
 }
