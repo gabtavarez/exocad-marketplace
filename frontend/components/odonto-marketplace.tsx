@@ -586,6 +586,7 @@ export default function OdontoMarketplace() {
   const [usingFallback, setUsingFallback] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<OrderResponse | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
 
   const loadOrders = async () => {
     try {
@@ -655,9 +656,15 @@ export default function OdontoMarketplace() {
 
   const handleCreateOrder = async (request: CreateOrderRequest, caseFiles: CaseFile[], onFilesChange: (files: CaseFile[]) => void) => {
     const createdOrder = await createOrder(request)
+    setOrders((current) => [createdOrder, ...current.filter((order) => order.id !== createdOrder.id)])
+    setUsingFallback(false)
     await uploadFiles(createdOrder.id, caseFiles, onFilesChange)
-    await loadOrders()
-    setSelectedOrder(await getOrderById(String(createdOrder.id)))
+    const detailedOrder = await getOrderById(String(createdOrder.id))
+    setOrders((current) => [detailedOrder, ...current.filter((order) => order.id !== detailedOrder.id)])
+    setSelectedOrder(detailedOrder)
+    setFeedback('Caso criado com sucesso.')
+    window.setTimeout(() => setFeedback(null), 3500)
+    void loadOrders()
     setActive('Meus Casos')
   }
 
@@ -694,5 +701,5 @@ export default function OdontoMarketplace() {
         ? <DesignerBoard orders={orders} onOpenCase={openCase} onApply={handleApply} />
         : <Dashboard orders={orders} usingFallback={usingFallback} onNewCase={() => setActive('Novo Caso')} onOpenCase={openCase} />
 
-  return <div className="app-shell"><Header role={role} viewRole={viewRole} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onProfile={() => setProfileOpen(true)} onLogout={signOut} onNotificationLink={(linkUrl) => void openNotificationLink(linkUrl)} onViewRoleChange={changeViewRole} /><div className="app-body"><Sidebar active={active} setActive={setActive} role={viewRole} orderCount={orders.length} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onLogout={signOut} onProfile={() => setProfileOpen(true)} /><main className="main-area">{screen}</main></div>{profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}</div>
+  return <div className="app-shell"><Header role={role} viewRole={viewRole} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onProfile={() => setProfileOpen(true)} onLogout={signOut} onNotificationLink={(linkUrl) => void openNotificationLink(linkUrl)} onViewRoleChange={changeViewRole} /><div className="app-body"><Sidebar active={active} setActive={setActive} role={viewRole} orderCount={orders.length} userName={user?.name ?? 'Utilizador'} avatarUrl={user?.avatarUrl} onLogout={signOut} onProfile={() => setProfileOpen(true)} /><main className="main-area">{screen}</main></div>{feedback && <div className="app-toast" role="status"><CheckCircle2 />{feedback}</div>}{profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}</div>
 }
